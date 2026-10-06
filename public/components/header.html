@@ -1,0 +1,39 @@
+<header class="site-header" id="siteHeader">
+  <div class="container header-inner">
+    <a class="logo" href="index.html" aria-label="Courssins Technology Institute, home">
+      <img src="assets/images/logo-mark.svg" width="38" height="38" alt=""><span class="logo-text">Courssins</span>
+    </a>
+    <nav class="nav-desktop" aria-label="Primary">
+      <a href="index.html" data-nav="index">Home</a>
+      <a href="about.html" data-nav="about">About</a>
+      <a href="courses.html" data-nav="courses">Courses</a>
+      <a href="tutors.html" data-nav="tutors">Tutors</a>
+      <a href="library.html" data-nav="library">Library</a>
+      <a href="blog.html" data-nav="blog">Blog</a>
+    </nav>
+    <div class="header-actions">
+      <a class="nav-login" href="login.html" data-auth="out">Log in</a>
+      <a class="btn btn-lime btn-sm" href="signup.html" data-auth="out">Sign up</a>
+      <a class="btn btn-dark btn-sm" href="dashboard.html" data-auth="in" data-dash-link hidden>Dashboard</a>
+      <button class="nav-login" type="button" data-signout data-auth="in" hidden>Log out</button>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="Open menu"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobileMenu" inert>
+    <nav class="mobile-nav" aria-label="Mobile">
+      <a href="index.html" data-nav="index">Home</a>
+      <a href="about.html" data-nav="about">About</a>
+      <a href="courses.html" data-nav="courses">Courses</a>
+      <a href="tutors.html" data-nav="tutors">Tutors</a>
+      <a href="library.html" data-nav="library">Library</a>
+      <a href="blog.html" data-nav="blog">Blog</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <div class="mobile-actions">
+      <a class="btn btn-outline" href="login.html" data-auth="out">Log in</a>
+      <a class="btn btn-lime" href="signup.html" data-auth="out">Sign up</a>
+      <a class="btn btn-dark" href="dashboard.html" data-auth="in" data-dash-link hidden>Dashboard</a>
+      <button class="btn btn-outline" type="button" data-signout data-auth="in" hidden>Log out</button>
+    </div>
+  </div>
+</header>
