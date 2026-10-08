@@ -41,14 +41,14 @@ async function withTutors(s, courses) {
 export const getCourses = () => run(async (s) => {
   const { data, error } = await s.from('courses').select('*').eq('published', true).order('sort_order');
   if (error) throw error;
-  return withTutors(s, data || []);
+  return { data: await withTutors(s, data || []), error: null };
 }, D.courses.map(sampleCourse));
 export async function getCourse(slug) {
   const c = await run(async (s) => {
     const { data, error } = await s.from('courses').select('*, modules:course_modules(*)').eq('slug', slug).eq('published', true).maybeSingle();
     if (error) throw error;
-    if (!data) return null;
-    return (await withTutors(s, [data]))[0];
+    if (!data) return { data: null, error: null };
+    return { data: (await withTutors(s, [data]))[0], error: null };
   }, undefined);
   if (c === undefined) { const x = D.courses.find((k) => k.slug === slug); return x ? sampleCourse(x) : null; }
   if (c) c.modules = (c.modules || []).sort((a, b) => a.position - b.position);
