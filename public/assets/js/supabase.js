@@ -45,6 +45,12 @@ export async function requireAuth(roles) {
   const session = await getSession();
   if (!session) { location.replace('login.html?next=' + encodeURIComponent(location.pathname.split('/').pop() + location.search)); return new Promise(() => {}); }
   const p = await getProfile();
+  if (!p || p.is_active === false) {
+    await supabase.auth.signOut();
+    profilePromise = null;
+    location.replace('login.html?disabled=1');
+    return new Promise(() => {});
+  }
   if (roles && !roles.includes(p.role)) { location.replace(homeFor(p.role)); return new Promise(() => {}); }
   return p;
 }

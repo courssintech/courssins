@@ -32,7 +32,8 @@ export function img(src, alt, { w = 800, h = 600, lazy = true, cls = '' } = {}) 
 }
 
 export function courseCard(c) {
-  const tutor = c.tutor?.full_name || '';
+  const tutors = c.tutors?.map((t) => t.full_name).filter(Boolean) || (c.tutor?.full_name ? [c.tutor.full_name] : []);
+  const tutor = tutors.join(', ');
   return `<article class="card course-card" data-reveal>
     <a class="card-media" href="course.html?id=${esc(c.slug)}" tabindex="-1" aria-hidden="true">${img(c.image_url, c.title, { w: 800, h: 600 })}<span class="chip chip-float">${esc(c.category || 'Course')}</span></a>
     <div class="card-body">

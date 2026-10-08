@@ -13,8 +13,14 @@ f.addEventListener('submit', async (e) => {
   if (bad) return;
   if (!configured) { a.className = 'alert err'; a.textContent = 'Messages switch on once Supabase is connected (see README).'; a.hidden = false; return; }
   const btn = f.querySelector('button[type=submit]'); setBusy(btn, true, 'Sending');
-  const { error } = await supabase.from('contact_messages').insert({ name: v.name.trim(), email: v.email.trim(), subject: v.subject.trim() || null, message: v.message.trim() });
+  const messageId = crypto.randomUUID();
+  const { error } = await supabase.from('contact_messages').insert({ id: messageId, name: v.name.trim(), email: v.email.trim(), subject: v.subject.trim() || null, message: v.message.trim() });
+  if (error) { setBusy(btn, false); a.className = 'alert err'; a.textContent = 'Your message could not be sent. Please try again.'; a.hidden = false; return; }
+  const { data: notification, error: notificationError } = await supabase.functions.invoke('resend-notifications', { body: { type: 'contact', source_id: messageId } });
   setBusy(btn, false);
-  if (error) { a.className = 'alert err'; a.textContent = 'Your message could not be sent. Please try again.'; a.hidden = false; return; }
-  f.reset(); a.className = 'alert ok'; a.textContent = 'Thank you. We have received your message and will reply by email.'; a.hidden = false; toast('Message sent', 'ok');
+  f.reset(); a.className = notificationError || notification?.error ? 'alert info' : 'alert ok';
+  a.textContent = notificationError || notification?.error
+    ? 'Your message was saved, but our email alert could not be delivered. Please contact us directly if your request is urgent.'
+    : 'Thank you. We have received your message and will reply by email.';
+  a.hidden = false; toast('Message sent', 'ok');
 });

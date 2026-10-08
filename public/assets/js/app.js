@@ -59,6 +59,10 @@ export function bindNewsletter(root = document) {
       btn.disabled = false;
       if (r.offline) { msg.textContent = 'Subscriptions switch on once Supabase is connected (see README).'; msg.className = 'form-msg err'; return; }
       if (!r.ok) { msg.textContent = r.message; msg.className = 'form-msg err'; return; }
+      if (!r.existing && r.id) {
+        const { data, error } = await supabase.functions.invoke('resend-notifications', { body: { type: 'newsletter', source_id: r.id } });
+        if (error || data?.error) { msg.textContent = 'You are subscribed, but we could not notify the team. Please use the contact page if you need a reply.'; msg.className = 'form-msg err'; input.value = ''; return; }
+      }
       msg.textContent = r.existing ? 'You are already on the list. Thank you!' : 'You are in. Watch your inbox for updates.'; msg.className = 'form-msg ok'; input.value = ''; toast('Subscribed', 'ok');
     });
   });

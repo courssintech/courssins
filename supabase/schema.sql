@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   interest text,
   avatar_url text,
   role text not null default 'student' check (role in ('student','tutor','admin','super_admin')),
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -29,11 +30,11 @@ create table if not exists public.students (
 
 -- ------------------------------------------------------------------ role helpers (SECURITY DEFINER so RLS can call them safely)
 create or replace function public.is_admin() returns boolean language sql stable security definer set search_path = public as
-$$ select coalesce((select role in ('admin','super_admin') from public.profiles where id = auth.uid()), false) $$;
+$$ select coalesce((select role in ('admin','super_admin') and is_active from public.profiles where id = auth.uid()), false) $$;
 create or replace function public.is_super_admin() returns boolean language sql stable security definer set search_path = public as
-$$ select coalesce((select role = 'super_admin' from public.profiles where id = auth.uid()), false) $$;
+$$ select coalesce((select role = 'super_admin' and is_active from public.profiles where id = auth.uid()), false) $$;
 create or replace function public.is_staff() returns boolean language sql stable security definer set search_path = public as
-$$ select coalesce((select role in ('tutor','admin','super_admin') from public.profiles where id = auth.uid()), false) $$;
+$$ select coalesce((select role in ('tutor','admin','super_admin') and is_active from public.profiles where id = auth.uid()), false) $$;
 
 -- ------------------------------------------------------------------ catalogue
 create table if not exists public.tutors (
@@ -79,8 +80,15 @@ create table if not exists public.courses (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.course_tutors (
+  course_id uuid not null references public.courses(id) on delete cascade,
+  tutor_id uuid not null references public.tutors(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (course_id, tutor_id)
+);
+
 create or replace function public.owns_course(cid uuid) returns boolean language sql stable security definer set search_path = public as
-$$ select exists (select 1 from public.courses c join public.tutors t on t.id = c.tutor_id where c.id = cid and t.user_id = auth.uid()) $$;
+$$ select exists (select 1 from public.course_tutors ct join public.tutors t on t.id = ct.tutor_id join public.profiles p on p.id = t.user_id where ct.course_id = cid and t.user_id = auth.uid() and p.role = 'tutor' and p.is_active) $$;
 
 create table if not exists public.course_modules (
   id uuid primary key default gen_random_uuid(),
@@ -152,6 +160,18 @@ create table if not exists public.assignments (
   max_score int not null default 100,
   due_days int,
   position int not null default 1
+);
+create table if not exists public.course_resources (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  title text not null,
+  resource_type text not null check (resource_type in ('video','pdf','note','assignment')),
+  description text,
+  object_path text,
+  external_url text,
+  published boolean not null default true,
+  created_at timestamptz not null default now(),
+  check (object_path is not null or external_url is not null)
 );
 create table if not exists public.assignment_submissions (
   id uuid primary key default gen_random_uuid(),
@@ -229,6 +249,15 @@ create table if not exists public.newsletter_subscribers (
   email text unique not null check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' and length(email) <= 254),
   created_at timestamptz not null default now()
 );
+create table if not exists public.email_notification_deliveries (
+  source_type text not null check (source_type in ('contact','newsletter')),
+  source_id uuid not null,
+  sender_hash text not null,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz,
+  primary key (source_type, source_id)
+);
+create index if not exists idx_email_notification_rate on public.email_notification_deliveries(sender_hash, created_at desc);
 create table if not exists public.pages (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
@@ -258,6 +287,16 @@ create table if not exists public.course_reviews (
   approved boolean not null default false, created_at timestamptz not null default now(),
   unique (course_id, user_id)
 );
+create table if not exists public.testimonials (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  quote text not null,
+  programme text,
+  image_url text,
+  published boolean not null default false,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
 
 create index if not exists idx_lessons_course on public.lessons(course_id, position);
 create index if not exists idx_modules_course on public.course_modules(course_id, position);
@@ -285,8 +324,17 @@ create trigger on_auth_user_created after insert on auth.users for each row exec
 -- Only a super admin can change roles (SQL editor / service role, where auth.uid() is null, may bootstrap the first one).
 create or replace function public.protect_profile_role() returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if new.role is distinct from old.role and auth.uid() is not null and not public.is_super_admin() then
-    raise exception 'Only a super admin can change roles';
+  if auth.uid() is not null and not public.is_super_admin() then
+    if new.role is distinct from old.role then
+      raise exception 'Only a super admin can change roles';
+    end if;
+    if new.is_active is distinct from old.is_active then
+      raise exception 'Only a super admin can change account status';
+    end if;
+  end if;
+  if old.role = 'super_admin' and old.is_active and (new.role <> 'super_admin' or not new.is_active)
+    and (select count(*) from public.profiles where role = 'super_admin' and is_active) <= 1 then
+    raise exception 'At least one active super admin must remain';
   end if;
   new.updated_at = now();
   return new;
@@ -411,7 +459,7 @@ grant execute on function public.verify_certificate(text) to anon, authenticated
 
 -- ------------------------------------------------------------------ Row Level Security
 do $$ declare t text; begin
-  foreach t in array array['profiles','students','tutors','courses','course_modules','lessons','enrollments','payments','course_progress','assignments','assignment_submissions','exams','exam_questions','exam_results','certificates','events','library','blog_posts','newsletter_subscribers','pages','notifications','settings','contact_messages','course_reviews'] loop
+  foreach t in array array['profiles','students','tutors','courses','course_tutors','course_modules','lessons','enrollments','payments','course_progress','assignments','course_resources','assignment_submissions','exams','exam_questions','exam_results','certificates','events','library','blog_posts','newsletter_subscribers','email_notification_deliveries','pages','notifications','settings','contact_messages','course_reviews','testimonials'] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
 end $$;
@@ -427,6 +475,7 @@ end $$;
 create policy profiles_select on public.profiles for select using (id = auth.uid() or public.is_admin());
 create policy profiles_update_own on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
 create policy profiles_update_admin on public.profiles for update using (public.is_admin()) with check (public.is_admin());
+create policy profiles_tutor_students_select on public.profiles for select using (role = 'student' and exists (select 1 from public.enrollments e where e.user_id = profiles.id and e.status = 'active' and public.owns_course(e.course_id)));
 create policy students_select on public.students for select using (user_id = auth.uid() or public.is_admin());
 create policy students_admin on public.students for all using (public.is_admin()) with check (public.is_admin());
 
@@ -435,6 +484,8 @@ create policy tutors_read on public.tutors for select using (published or public
 create policy tutors_admin on public.tutors for all using (public.is_admin()) with check (public.is_admin());
 create policy courses_read on public.courses for select using (published or public.is_admin() or public.owns_course(id));
 create policy courses_admin on public.courses for all using (public.is_admin()) with check (public.is_admin());
+create policy course_tutors_read on public.course_tutors for select using (exists (select 1 from public.courses c where c.id = course_id and c.published) or public.is_admin() or public.owns_course(course_id));
+create policy course_tutors_manage on public.course_tutors for all using (public.is_admin()) with check (public.is_admin());
 create policy modules_read on public.course_modules for select using (exists (select 1 from public.courses c where c.id = course_id and c.published) or public.is_admin() or public.owns_course(course_id));
 create policy modules_write on public.course_modules for all using (public.is_admin() or public.owns_course(course_id)) with check (public.is_admin() or public.owns_course(course_id));
 create policy lessons_read on public.lessons for select using (public.is_admin() or public.owns_course(course_id) or public.is_enrolled(course_id)
@@ -453,6 +504,8 @@ create policy progress_delete on public.course_progress for delete using (user_i
 
 create policy assign_read on public.assignments for select using (public.is_admin() or public.owns_course(course_id) or public.is_enrolled(course_id));
 create policy assign_write on public.assignments for all using (public.is_admin() or public.owns_course(course_id)) with check (public.is_admin() or public.owns_course(course_id));
+create policy course_resources_read on public.course_resources for select using (public.is_admin() or public.owns_course(course_id) or (published and public.is_enrolled(course_id)));
+create policy course_resources_manage on public.course_resources for all using (public.is_admin() or public.owns_course(course_id)) with check (public.is_admin() or public.owns_course(course_id));
 create policy sub_select on public.assignment_submissions for select using (user_id = auth.uid() or public.is_admin()
   or exists (select 1 from public.assignments a where a.id = assignment_id and public.owns_course(a.course_id)));
 create policy sub_insert on public.assignment_submissions for insert with check (user_id = auth.uid() and score is null and feedback is null and status = 'submitted'
@@ -497,13 +550,25 @@ create policy contact_admin on public.contact_messages for all using (public.is_
 create policy reviews_read on public.course_reviews for select using (approved or user_id = auth.uid() or public.is_admin());
 create policy reviews_insert on public.course_reviews for insert with check (user_id = auth.uid() and approved = false and public.is_enrolled(course_id));
 create policy reviews_admin on public.course_reviews for all using (public.is_admin()) with check (public.is_admin());
+create policy testimonials_read on public.testimonials for select using (published or public.is_admin());
+create policy testimonials_manage on public.testimonials for all using (public.is_admin()) with check (public.is_admin());
 
 -- ------------------------------------------------------------------ storage: public "media" bucket, admin-only writes
+revoke all on table public.email_notification_deliveries from public, anon, authenticated;
 insert into storage.buckets (id, name, public) values ('media', 'media', true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit) values ('course-materials', 'course-materials', false, 52428800) on conflict (id) do update set public = false, file_size_limit = 52428800;
 drop policy if exists media_read on storage.objects;
 drop policy if exists media_admin_write on storage.objects;
 create policy media_read on storage.objects for select using (bucket_id = 'media');
 create policy media_admin_write on storage.objects for all using (bucket_id = 'media' and public.is_admin()) with check (bucket_id = 'media' and public.is_admin());
+drop policy if exists course_materials_read on storage.objects;
+drop policy if exists course_materials_insert on storage.objects;
+drop policy if exists course_materials_update on storage.objects;
+drop policy if exists course_materials_delete on storage.objects;
+create policy course_materials_read on storage.objects for select using (bucket_id = 'course-materials' and exists (select 1 from public.course_resources r where r.object_path = name and (public.is_admin() or public.owns_course(r.course_id) or (r.published and public.is_enrolled(r.course_id)))));
+create policy course_materials_insert on storage.objects for insert with check (bucket_id = 'course-materials' and case when split_part(name, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then public.is_admin() or public.owns_course(split_part(name, '/', 1)::uuid) else false end);
+create policy course_materials_update on storage.objects for update using (bucket_id = 'course-materials' and case when split_part(name, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then public.is_admin() or public.owns_course(split_part(name, '/', 1)::uuid) else false end) with check (bucket_id = 'course-materials' and case when split_part(name, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then public.is_admin() or public.owns_course(split_part(name, '/', 1)::uuid) else false end);
+create policy course_materials_delete on storage.objects for delete using (bucket_id = 'course-materials' and case when split_part(name, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then public.is_admin() or public.owns_course(split_part(name, '/', 1)::uuid) else false end);
 
 -- Bootstrapping the first Super Admin: sign up on the website, then run (with your email):
 --   update public.profiles set role = 'super_admin' where email = 'you@example.com';

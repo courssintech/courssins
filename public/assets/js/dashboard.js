@@ -53,10 +53,18 @@ if (!configured) {
     async lessons(courseId) {
       const act = await active(); if (!act.length) return needCourse();
       courseId = courseId || S.lessonCourse || act[0].course_id; S.lessonCourse = courseId;
-      const [{ data: ls }, { data: pr }, { data: mods }] = await Promise.all([supabase.from('lessons').select('*').eq('course_id', courseId).order('position'), supabase.from('course_progress').select('lesson_id').eq('course_id', courseId).eq('user_id', me.id), supabase.from('course_modules').select('id,title,position').eq('course_id', courseId).order('position')]);
+      const [{ data: ls }, { data: pr }, { data: mods }, { data: resources }] = await Promise.all([supabase.from('lessons').select('*').eq('course_id', courseId).order('position'), supabase.from('course_progress').select('lesson_id').eq('course_id', courseId).eq('user_id', me.id), supabase.from('course_modules').select('id,title,position').eq('course_id', courseId).order('position'), supabase.from('course_resources').select('*').eq('course_id', courseId).eq('published', true).order('created_at')]);
+      const resourceLinks = await Promise.all((resources || []).map(async (resource) => {
+        if (resource.object_path) {
+          const { data } = await supabase.storage.from('course-materials').createSignedUrl(resource.object_path, 3600);
+          return { ...resource, href: data?.signedUrl || '' };
+        }
+        return { ...resource, href: /^https?:\/\//i.test(resource.external_url || '') ? resource.external_url : '' };
+      }));
       const done = new Set((pr || []).map((r) => r.lesson_id)); S.lessonList = ls || []; S.doneSet = done;
       const group = (mods || []).map((m) => `<h3 style="margin:22px 0 10px">Module ${m.position}: ${esc(m.title)}</h3>` + (ls || []).filter((l) => l.module_id === m.id).map((l) => `<div class="lesson ${done.has(l.id) ? 'done' : ''}" tabindex="0" role="button" data-lesson="${l.id}"><span class="dot">${done.has(l.id) ? icon('check', '', 14) : ''}</span><div style="flex:1"><strong>${esc(l.title)}</strong>${l.duration_min ? `<div class="muted" style="font-size:.85rem">${l.duration_min} min</div>` : ''}</div>${icon('arrow-right', '', 18)}</div>`).join('')).join('');
-      return `<div class="tools"><label for="lsCourse" class="label">Course</label><select class="input" id="lsCourse" style="max-width:420px">${act.map((e) => `<option value="${e.course_id}" ${e.course_id === courseId ? 'selected' : ''}>${esc(e.course.title)}</option>`).join('')}</select></div><div class="panel">${bar(S.prog[courseId]?.percent || 0)}${group || empty('No lessons yet', 'Your tutor has not published lessons for this course.')}</div>`;
+      const resourceList = resourceLinks.length ? `<section class="block"><h3>Course resources</h3><div class="list">${resourceLinks.map((resource) => `<div class="list-item"><div class="grow"><h4>${esc(resource.title)}</h4><p class="muted">${esc(resource.description || resource.resource_type)}</p></div>${resource.href ? `<a class="btn btn-dark btn-sm" href="${esc(resource.href)}" target="_blank" rel="noopener noreferrer">Open ${icon('external', '', 16)}</a>` : '<span class="muted">File unavailable</span>'}</div>`).join('')}</div></section>` : '';
+      return `<div class="tools"><label for="lsCourse" class="label">Course</label><select class="input" id="lsCourse" style="max-width:420px">${act.map((e) => `<option value="${e.course_id}" ${e.course_id === courseId ? 'selected' : ''}>${esc(e.course.title)}</option>`).join('')}</select></div><div class="panel">${bar(S.prog[courseId]?.percent || 0)}${group || empty('No lessons yet', 'Your tutor has not published lessons for this course.')}${resourceList}</div>`;
     },
     async assignments() {
       const act = await active(); if (!act.length) return needCourse();

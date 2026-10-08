@@ -21,10 +21,35 @@ export const getSettings = async () => {
   (rows || []).forEach((r) => { if (r.value && (Array.isArray(r.value) ? r.value.length : Object.keys(r.value).length)) out[r.key] = r.value; });
   return out;
 };
-const COURSE_SEL = '*, tutor:tutors(id,slug,full_name,image_url,specialization)';
-export const getCourses = () => run((s) => s.from('courses').select(COURSE_SEL).eq('published', true).order('sort_order'), D.courses.map(sampleCourse));
+const TUTOR_SEL = 'id,slug,full_name,image_url,specialization';
+async function withTutors(s, courses) {
+  if (!courses.length) return courses;
+  const { data, error } = await s.from('course_tutors').select(`course_id,tutor:tutors(${TUTOR_SEL})`).in('course_id', courses.map((c) => c.id));
+  if (error) throw error;
+  const byCourse = new Map();
+  (data || []).forEach((row) => {
+    if (!row.tutor) return;
+    const list = byCourse.get(row.course_id) || [];
+    list.push(row.tutor);
+    byCourse.set(row.course_id, list);
+  });
+  return courses.map((course) => {
+    const tutors = byCourse.get(course.id) || [];
+    return { ...course, tutors, tutor: tutors[0] || null };
+  });
+}
+export const getCourses = () => run(async (s) => {
+  const { data, error } = await s.from('courses').select('*').eq('published', true).order('sort_order');
+  if (error) throw error;
+  return withTutors(s, data || []);
+}, D.courses.map(sampleCourse));
 export async function getCourse(slug) {
-  const c = await run((s) => s.from('courses').select(`${COURSE_SEL}, modules:course_modules(*)`).eq('slug', slug).eq('published', true).maybeSingle(), undefined);
+  const c = await run(async (s) => {
+    const { data, error } = await s.from('courses').select('*, modules:course_modules(*)').eq('slug', slug).eq('published', true).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return (await withTutors(s, [data]))[0];
+  }, undefined);
   if (c === undefined) { const x = D.courses.find((k) => k.slug === slug); return x ? sampleCourse(x) : null; }
   if (c) c.modules = (c.modules || []).sort((a, b) => a.position - b.position);
   return c;
@@ -46,10 +71,12 @@ export async function getPage(slug) {
   return p === undefined ? D.pages.find((x) => x.slug === slug) || null : p;
 }
 export const getReviews = (courseId) => configured && courseId ? run((s) => s.from('course_reviews').select('name,rating,comment,created_at').eq('course_id', courseId).eq('approved', true).order('created_at', { ascending: false }), []) : Promise.resolve([]);
+export const getTestimonials = () => configured ? run((s) => s.from('testimonials').select('id,name,quote,programme,image_url').eq('published', true).order('sort_order').limit(6), []) : Promise.resolve([]);
 
 export async function subscribe(email) {
   if (!configured) return { ok: false, offline: true };
-  const { error } = await supabase.from('newsletter_subscribers').insert({ email: email.trim().toLowerCase() });
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from('newsletter_subscribers').insert({ id, email: email.trim().toLowerCase() });
   if (error && error.code !== '23505') return { ok: false, message: 'Could not subscribe right now. Please try again.' };
-  return { ok: true, existing: error?.code === '23505' };
+  return { ok: true, existing: error?.code === '23505', id: error ? null : id };
 }

@@ -11,7 +11,7 @@ else {
   const reviews = await getReviews(c.id);
   const url = `${CONFIG.SITE_URL}/course.html?id=${c.slug}`;
   setMeta({ title: `${c.title} Course in Nigeria`, description: c.short_description, image: `${CONFIG.SITE_URL}/${c.image_url}`, url, jsonld: { '@context': 'https://schema.org', '@type': 'Course', name: c.title, description: c.short_description, provider: { '@type': 'Organization', name: 'Courssins Technology Institute', sameAs: CONFIG.SITE_URL }, offers: { '@type': 'Offer', price: c.price, priceCurrency: c.currency, category: 'Paid' } } });
-  const t = c.tutor;
+  const tutors = c.tutors?.length ? c.tutors : c.tutor ? [c.tutor] : [];
   const mods = arr(c.modules);
   const avg = reviews.length ? (reviews.reduce((n, r) => n + r.rating, 0) / reviews.length).toFixed(1) : null;
   const stars = (n) => `<span class="stars" aria-label="${n} out of 5">${Array.from({ length: 5 }, (_, i) => icon('star', '', 16).replace('fill="none"', i < n ? 'fill="currentColor"' : 'fill="none"')).join('')}</span>`;
@@ -35,7 +35,7 @@ else {
   <aside class="aside-card"><strong class="price">${money(c.price, c.currency)}</strong>
     <button class="btn btn-lime btn-lg btn-block" id="enrollBtn" type="button">Enrol now</button>
     <ul class="facts"><li>${icon('clock')}<span>${esc(c.duration)}</span></li><li>${icon('laptop')}<span>Online, on any device</span></li><li>${icon('book')}<span>${mods.length} modules</span></li><li>${icon('award')}<span>Verified certificate</span></li></ul>
-    ${t ? `<a class="tutor-mini" href="tutor.html?id=${esc(t.slug)}">${img(t.image_url, t.full_name, { w: 56, h: 56 })}<div><strong>${esc(t.full_name)}</strong><br><span class="muted" style="font-size:.9rem">${esc(t.specialization || 'Tutor')}</span></div></a>` : ''}
+    ${tutors.map((t) => `<a class="tutor-mini" href="tutor.html?id=${esc(t.slug)}">${img(t.image_url, t.full_name, { w: 56, h: 56 })}<div><strong>${esc(t.full_name)}</strong><br><span class="muted" style="font-size:.9rem">${esc(t.specialization || 'Tutor')}</span></div></a>`).join('')}
   </aside></div>`;
   refresh(root);
 

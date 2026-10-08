@@ -196,6 +196,10 @@ insert into public.lessons (course_id, module_id, title, content, position) sele
 insert into public.lessons (course_id, module_id, title, content, position) select (select id from public.courses where slug = 'child-safety-and-care'), (select id from public.course_modules where course_id = (select id from public.courses where slug = 'child-safety-and-care') and position = 4), 'Reporting routes', 'This lesson covers: reporting routes. Your tutor will add notes and videos from the admin panel.', 41 where not exists (select 1 from public.lessons where course_id = (select id from public.courses where slug = 'child-safety-and-care') and title = 'Reporting routes');
 insert into public.lessons (course_id, module_id, title, content, position) select (select id from public.courses where slug = 'child-safety-and-care'), (select id from public.course_modules where course_id = (select id from public.courses where slug = 'child-safety-and-care') and position = 4), 'Record keeping', 'This lesson covers: record keeping. Your tutor will add notes and videos from the admin panel.', 42 where not exists (select 1 from public.lessons where course_id = (select id from public.courses where slug = 'child-safety-and-care') and title = 'Record keeping');
 
+insert into public.course_tutors (course_id, tutor_id)
+select id, tutor_id from public.courses where tutor_id is not null
+on conflict (course_id, tutor_id) do nothing;
+
 insert into public.blog_posts (slug, title, excerpt, content, category, author, image_url, published, published_at) values ('how-to-choose-your-first-tech-skill', 'How to choose your first tech skill', 'A simple way to compare design, development, data and security before you commit your time and money.', '<p>Most beginners ask which skill pays the most. A better first question is which kind of work you can practise for an hour every day without dreading it.</p><p>Design suits people who notice details and like visual problems. Development suits people who enjoy building things that work. Data analysis suits people who like finding the answer hidden in numbers. Cybersecurity suits people who enjoy asking how something could go wrong.</p><p>Pick two options and spend one weekend on a free beginner tutorial for each. Notice which one you keep thinking about afterwards. That is usually your answer.</p><p>Then choose a structured programme with assignments and feedback, because steady practice with a mentor beats months of scattered videos.</p>', 'Career Guidance', 'Courssins Editorial', 'assets/images/blog/how-to-choose-your-first-tech-skill.svg', true, '2026-09-01T09:00:00Z') on conflict (slug) do nothing;
 insert into public.blog_posts (slug, title, excerpt, content, category, author, image_url, published, published_at) values ('what-a-beginner-web-development-path-looks-like', 'What a beginner web development path looks like', 'From your first HTML page to a deployed project: the order that saves beginners the most time.', '<p>Start with HTML and CSS. Build three small pages by hand: a profile page, a menu for a local business and a simple landing page. Make each one work on a phone first.</p><p>Move to JavaScript once layouts feel comfortable. Learn variables, functions, arrays and the DOM, then build something interactive such as a tip calculator or a to-do list.</p><p>Learn Git early. Saving your work on GitHub gives you a public record of progress and makes collaboration possible.</p><p>Finally, deploy. A project that lives at a real web address is worth more in an interview than ten that only run on your laptop.</p>', 'Web Development', 'Courssins Editorial', 'assets/images/blog/what-a-beginner-web-development-path-looks-like.svg', true, '2026-09-08T09:00:00Z') on conflict (slug) do nothing;
 insert into public.blog_posts (slug, title, excerpt, content, category, author, image_url, published, published_at) values ('password-habits-that-actually-protect-you', 'Password habits that actually protect you', 'Four everyday habits that stop most account takeovers, none of which need special software.', '<p>Use a different password for every important account. When one site is breached, attackers try the same email and password everywhere else.</p><p>Prefer long passphrases over short complex ones. Four or five unrelated words are easier to remember and harder to guess.</p><p>Turn on multi-factor authentication for email, banking and social media. Your email account matters most, because password resets go there.</p><p>Treat unexpected links and urgent messages with suspicion, even from people you know. If a message asks you to act quickly, pause and confirm through another channel.</p>', 'Cybersecurity', 'Courssins Editorial', 'assets/images/blog/password-habits-that-actually-protect-you.svg', true, '2026-09-15T09:00:00Z') on conflict (slug) do nothing;
@@ -205,13 +209,266 @@ insert into public.library (title, type, description, url, access, published) se
 insert into public.library (title, type, description, url, access, published) select 'Pro Git (free book)', 'book', 'The standard guide to Git, from first commit to advanced workflows.', 'https://git-scm.com/book/en/v2', 'public', true where not exists (select 1 from public.library where title = 'Pro Git (free book)');
 insert into public.library (title, type, description, url, access, published) select 'OWASP Top Ten', 'document', 'The most critical web application security risks, explained.', 'https://owasp.org/www-project-top-ten/', 'public', true where not exists (select 1 from public.library where title = 'OWASP Top Ten');
 insert into public.library (title, type, description, url, access, published) select 'WCAG 2.2 quick reference', 'document', 'A checklist-style reference for building accessible web content.', 'https://www.w3.org/WAI/WCAG22/quickref/', 'public', true where not exists (select 1 from public.library where title = 'WCAG 2.2 quick reference');
-insert into public.pages (slug, title, html, css, meta_title, meta_description, published) values ('terms-and-conditions', 'Terms and Conditions', '<section class="prose"><p>These terms explain how you may use the Courssins website and learning platform. By creating an account or enrolling in a programme you agree to them.</p><h2>Accounts</h2><p>You are responsible for keeping your login details private and for activity on your account.</p><h2>Enrolment and payment</h2><p>Course content unlocks after your payment has been verified. Fees and durations are shown on each course page.</p><h2>Certificates</h2><p>Certificates are issued after all lessons, assignments and examinations have been completed. Each certificate has a unique number that can be verified online.</p><h2>Acceptable use</h2><p>Do not share paid course materials, submit work that is not your own, or misuse the platform.</p><p><em>This is a starter text. Have it reviewed and edited by a qualified adviser before you rely on it.</em></p></section>', '', 'Terms and Conditions | Courssins Technology Institute', 'Terms of use for Courssins Technology Institute.', true) on conflict (slug) do nothing;
-insert into public.pages (slug, title, html, css, meta_title, meta_description, published) values ('privacy-policy', 'Privacy Policy', '<section class="prose"><p>This policy explains what personal information Courssins collects and how it is used.</p><h2>What we collect</h2><p>Account details you provide (name, email, phone, country), learning activity such as progress and results, and payment records.</p><h2>How we use it</h2><p>To provide your courses, issue certificates, send account and course messages, and improve the platform.</p><h2>Sharing</h2><p>We do not sell personal data. Payment processing is handled by our payment provider.</p><h2>Your choices</h2><p>You can update your details in your dashboard and unsubscribe from newsletters at any time. Contact us to request deletion of your account.</p><p><em>This is a starter text. Have it reviewed and edited by a qualified adviser before you rely on it.</em></p></section>', '', 'Privacy Policy | Courssins Technology Institute', 'How Courssins Technology Institute collects and uses personal data.', true) on conflict (slug) do nothing;
+insert into public.pages (slug, title, html, css, meta_title, meta_description, published)
+values (
+	'terms-and-conditions',
+	'Terms and Conditions',
+	$terms$<section class="prose">
+		<p><strong>Last Updated:</strong> October 7, 2026</p>
+		<p>Welcome to <strong>Courssin Tech Institute</strong>. These Terms and Conditions govern your access to and use of the Courssin Tech Institute website, learning platform, courses, services, and related resources.</p>
+		<p>By accessing our website, creating an account, enrolling in a course, making a payment, or using any of our services, you agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, please do not use our services.</p>
+		<h2>1. About Courssin Tech Institute</h2>
+		<p>Courssin Tech Institute provides technology education, digital skills training, online learning resources, courses, and related educational services.</p>
+		<p>Throughout these Terms and Conditions, "Courssin Tech Institute", "Courssin", "we", "us", or "our" refers to Courssin Tech Institute.</p>
+		<p>"Student", "user", "you", or "your" refers to any person who accesses our website, creates an account, enrolls in a course, or uses our services.</p>
+		<h2>2. Eligibility</h2>
+		<p>You must provide accurate and truthful information when creating an account or registering for a course.</p>
+		<p>If you are under the age of 18, you should have the consent of a parent or legal guardian before registering for paid services or providing personal information.</p>
+		<p>We reserve the right to refuse registration or access to our services where necessary.</p>
+		<h2>3. User Accounts</h2>
+		<p>Some features of our platform require you to create an account.</p>
+		<p>You are responsible for:</p>
+		<ul><li>Providing accurate registration information.</li><li>Keeping your login credentials confidential.</li><li>Maintaining the security of your account.</li><li>Not allowing unauthorized individuals to access your account.</li><li>Informing us promptly if you believe your account has been compromised.</li></ul>
+		<p>You are responsible for activities carried out through your account unless the activity resulted from circumstances outside your reasonable control.</p>
+		<p>We reserve the right to suspend or terminate accounts that violate these Terms and Conditions.</p>
+		<h2>4. Course Enrollment</h2>
+		<p>When you enroll in a Courssin Tech Institute course, you receive a personal, limited, and non-transferable right to access the course materials for educational purposes.</p>
+		<p>You may not:</p>
+		<ul><li>Share your account with another person.</li><li>Resell or redistribute course access.</li><li>Copy, reproduce, or commercially distribute course materials without permission.</li><li>Upload course materials to unauthorized websites or platforms.</li><li>Record or redistribute paid classes without authorization.</li><li>Use course materials to create competing commercial products without written permission.</li></ul>
+		<p>Course availability, curriculum, instructors, schedules, and learning materials may be updated from time to time to improve the educational experience.</p>
+		<h2>5. Payments and Fees</h2>
+		<p>Where a course or service requires payment, the applicable price will be displayed before you complete your purchase.</p>
+		<p>You agree to provide accurate payment information and authorize the applicable payment provider to process your payment.</p>
+		<p>Prices may change from time to time. Any price change will generally apply to future purchases and will not alter a completed transaction unless required by law or otherwise communicated to you.</p>
+		<p>Where applicable, taxes, transaction fees, or other charges may be added to the displayed price.</p>
+		<h2>6. Refunds and Cancellations</h2>
+		<p>Refund eligibility depends on the specific course or service purchased and any refund policy communicated to you at the time of purchase.</p>
+		<p>Unless otherwise stated:</p>
+		<ul><li>Requests for refunds should be submitted through the official Courssin Tech Institute support channel.</li><li>Refund requests may be reviewed individually.</li><li>Refunds may not be available after substantial access or completion of a course.</li><li>Administrative, payment-processing, or third-party transaction fees may be non-refundable where permitted by law.</li></ul>
+		<p>Courssin Tech Institute reserves the right to establish specific refund conditions for individual courses, programs, events, or promotions.</p>
+		<h2>7. Certificates</h2>
+		<p>Where a course provides a certificate, eligibility may depend on meeting the requirements established for that course.</p>
+		<p>Completion of a course does not automatically guarantee employment, promotion, admission to another institution, professional licensing, or any particular financial outcome.</p>
+		<p>Certificates issued by Courssin Tech Institute confirm completion of the applicable Courssin educational program and should not be represented as government-issued qualifications unless expressly stated otherwise.</p>
+		<h2>8. Educational Disclaimer</h2>
+		<p>Our courses and educational materials are provided for learning and skills-development purposes.</p>
+		<p>While we make reasonable efforts to ensure that our educational content is accurate and useful, we do not guarantee that:</p>
+		<ul><li>All information will always be completely current.</li><li>A particular course will produce a specific career or financial result.</li><li>Completion of a course will guarantee employment.</li><li>Course content will meet every individual's specific educational or professional requirements.</li></ul>
+		<p>Students are responsible for applying the knowledge and skills obtained from our courses appropriately.</p>
+		<h2>9. Tutors and Instructors</h2>
+		<p>Courssin Tech Institute may provide access to tutors, instructors, mentors, or other educational professionals.</p>
+		<p>Tutors and instructors are expected to provide educational services professionally. However, individual opinions, examples, recommendations, or statements made during instruction may not necessarily represent the official position of Courssin Tech Institute.</p>
+		<p>We reserve the right to change instructors, schedules, or teaching arrangements when reasonably necessary.</p>
+		<h2>10. Website and Platform Usage</h2>
+		<p>You agree to use our website and learning platform lawfully and responsibly.</p>
+		<p>You must not:</p>
+		<ul><li>Attempt to gain unauthorized access to our systems.</li><li>Introduce malware, viruses, or other harmful software.</li><li>Interfere with the operation of our website or platform.</li><li>Attempt to access another user's account.</li><li>Scrape, copy, or systematically collect website content without permission.</li><li>Use our platform for fraudulent, abusive, or unlawful activities.</li><li>Impersonate Courssin Tech Institute, its staff, tutors, or other users.</li><li>Use our services to distribute spam, malicious content, or illegal material.</li></ul>
+		<p>We may restrict or terminate access where we reasonably believe that a user has violated these requirements.</p>
+		<h2>11. Intellectual Property</h2>
+		<p>Unless otherwise stated, the Courssin Tech Institute name, logo, website design, text, graphics, videos, course materials, documents, software, branding, and other content are owned by or licensed to Courssin Tech Institute.</p>
+		<p>You may use our educational materials only for the purpose for which they are provided.</p>
+		<p>You may not reproduce, modify, distribute, sell, publicly display, publish, or commercially exploit our copyrighted materials without prior written permission.</p>
+		<p>Nothing in these Terms transfers ownership of Courssin Tech Institute's intellectual property to you.</p>
+		<h2>12. Student-Submitted Content</h2>
+		<p>If you submit assignments, projects, comments, reviews, feedback, questions, or other content to Courssin Tech Institute, you remain responsible for that content.</p>
+		<p>You grant Courssin Tech Institute permission to use submitted content where reasonably necessary to operate, improve, promote, or provide our educational services, subject to applicable privacy laws and our Privacy Policy.</p>
+		<p>You must not submit content that:</p>
+		<ul><li>Violates another person's rights.</li><li>Contains malicious software.</li><li>Is unlawful, threatening, abusive, or defamatory.</li><li>Infringes copyright or intellectual-property rights.</li><li>Contains another person's private or confidential information without authorization.</li></ul>
+		<h2>13. Student Conduct</h2>
+		<p>Students are expected to behave respectfully toward tutors, staff, fellow students, and other members of the Courssin community.</p>
+		<p>Harassment, bullying, discrimination, threats, abusive behavior, cheating, impersonation, fraud, or deliberate disruption of learning activities may result in suspension or termination of access.</p>
+		<p>Serious violations may be reported to appropriate authorities where required or permitted by law.</p>
+		<h2>14. Third-Party Services</h2>
+		<p>Our website or platform may use third-party services such as payment processors, email providers, analytics services, hosting providers, authentication services, or other technology providers.</p>
+		<p>Your use of such services may also be subject to the third party's terms and policies.</p>
+		<p>Courssin Tech Institute is not responsible for the independent operation, availability, or policies of third-party services.</p>
+		<h2>15. Privacy</h2>
+		<p>We may collect and process personal information necessary to provide our services, manage accounts, process enrollments and payments, communicate with students, and improve our platform.</p>
+		<p>Our collection and use of personal information are described in our <a href="page.html?slug=privacy-policy">Privacy Policy</a>.</p>
+		<p>By using our services, you acknowledge that you have read and understood our Privacy Policy.</p>
+		<h2>16. Website Availability</h2>
+		<p>We aim to keep our website and learning platform available and reliable, but we do not guarantee uninterrupted access.</p>
+		<p>The website or specific services may occasionally be unavailable due to:</p>
+		<ul><li>Maintenance.</li><li>Technical problems.</li><li>Security incidents.</li><li>Internet or network failures.</li><li>Third-party service interruptions.</li><li>Circumstances beyond our reasonable control.</li></ul>
+		<p>We may modify, suspend, or discontinue portions of the platform when necessary.</p>
+		<h2>17. Links to Other Websites</h2>
+		<p>Our website may contain links to third-party websites.</p>
+		<p>These links are provided for convenience or educational purposes. Courssin Tech Institute does not necessarily endorse or control the content, security, products, or services of third-party websites.</p>
+		<p>You access third-party websites at your own risk and should review their applicable terms and privacy policies.</p>
+		<h2>18. Limitation of Liability</h2>
+		<p>To the extent permitted by applicable law, Courssin Tech Institute will not be liable for indirect, incidental, special, consequential, or unforeseeable losses arising from your use of our website, courses, or services.</p>
+		<p>We do not guarantee employment, income, business success, academic admission, certification by another organization, or any specific outcome from completing a course.</p>
+		<p>Nothing in these Terms excludes or limits liability that cannot legally be excluded or limited under applicable law.</p>
+		<h2>19. Indemnification</h2>
+		<p>To the extent permitted by law, you agree to be responsible for losses, claims, damages, liabilities, and reasonable expenses arising from your unlawful use of our services, violation of these Terms, or infringement of another person's rights.</p>
+		<h2>20. Suspension and Termination</h2>
+		<p>We may suspend or terminate your account or access to our services if you:</p>
+		<ul><li>Violate these Terms and Conditions.</li><li>Engage in fraudulent or unlawful activity.</li><li>Misuse our platform or educational materials.</li><li>Share or resell unauthorized course access.</li><li>Engage in abusive or threatening conduct.</li><li>Attempt to compromise the security of our systems.</li></ul>
+		<p>Where appropriate, we may provide notice before termination. However, immediate suspension may be necessary in cases involving security, fraud, serious misconduct, or legal requirements.</p>
+		<h2>21. Changes to These Terms</h2>
+		<p>We may update these Terms and Conditions from time to time.</p>
+		<p>When changes are made, we may update the "Last Updated" date at the beginning of this document.</p>
+		<p>Your continued use of our website and services after updated Terms become effective constitutes acceptance of the revised Terms.</p>
+		<h2>22. Governing Law</h2>
+		<p>These Terms and Conditions shall be interpreted in accordance with the applicable laws of the <strong>Federal Republic of Nigeria</strong>, unless another jurisdiction is required by applicable law.</p>
+		<p>Where disputes arise, the parties should first attempt to resolve the matter through good-faith communication before pursuing formal legal remedies.</p>
+		<h2>23. Severability</h2>
+		<p>If any provision of these Terms and Conditions is determined to be invalid, unlawful, or unenforceable, the remaining provisions will continue to apply to the fullest extent permitted by law.</p>
+		<h2>24. Entire Agreement</h2>
+		<p>These Terms and Conditions, together with our Privacy Policy and any other policies expressly referenced on our platform, constitute the agreement governing your use of Courssin Tech Institute's services.</p>
+		<h2>25. Contact Us</h2>
+		<p>If you have questions, concerns, complaints, or requests regarding these Terms and Conditions, please contact Courssin Tech Institute through the official contact channels provided on our website.</p>
+		<p><strong>Courssin Tech Institute</strong><br>Website: <a href="https://www.courssin.com.ng/">https://www.courssin.com.ng/</a></p>
+		<hr>
+		<p><strong>By creating an account, enrolling in a course, making a purchase, or using the Courssin Tech Institute platform, you acknowledge that you have read, understood, and agreed to these Terms and Conditions.</strong></p>
+	</section>$terms$,
+	'',
+	'Terms and Conditions | Courssin Tech Institute',
+	'Terms of use for Courssin Tech Institute.',
+	true
+)
+on conflict (slug) do update set
+	title = excluded.title,
+	html = excluded.html,
+	css = excluded.css,
+	meta_title = excluded.meta_title,
+	meta_description = excluded.meta_description,
+	published = excluded.published,
+	updated_at = now();
+insert into public.pages (slug, title, html, css, meta_title, meta_description, published)
+values (
+	'privacy-policy',
+	'Privacy Policy',
+	$privacy$<section class="prose">
+		<p><strong>Last Updated:</strong> October 7, 2026</p>
+		<p><strong>Courssin Tech Institute</strong> ("Courssin", "we", "us", or "our") respects your privacy and is committed to protecting the personal information of our students, tutors, visitors, and other users.</p>
+		<p>This Privacy Policy explains how we collect, use, store, protect, and disclose information when you visit or use the Courssin Tech Institute website, learning platform, courses, and related services.</p>
+		<p>By using our website or services, you acknowledge the practices described in this Privacy Policy.</p>
+		<h2>1. Information We Collect</h2>
+		<p>We may collect information that you provide directly to us when you create an account, enroll in a course, contact us, or use our services.</p>
+		<p>This may include:</p>
+		<h3>Account Information</h3>
+		<p>When you create an account, we may collect:</p>
+		<ul><li>Full name</li><li>Email address</li><li>Phone number</li><li>Username or account details</li><li>Password or authentication information</li><li>Profile photograph, where provided</li><li>Other information you choose to add to your profile</li></ul>
+		<h3>Student Information</h3>
+		<p>When you enroll in or participate in a course, we may collect information such as:</p>
+		<ul><li>Courses you enroll in</li><li>Course progress</li><li>Assignments and submissions</li><li>Quiz or assessment results</li><li>Certificates earned</li><li>Learning activity</li><li>Tutor or instructor interactions</li><li>Feedback and reviews</li></ul>
+		<h3>Payment Information</h3>
+		<p>When you purchase a course or service, payment information may be processed through third-party payment providers.</p>
+		<p>Depending on the payment method used, we may receive information such as:</p>
+		<ul><li>Transaction reference</li><li>Payment status</li><li>Amount paid</li><li>Date of transaction</li><li>Payment method</li><li>Limited transaction information provided by the payment provider</li></ul>
+		<p>We generally do not need to store your full card or bank-account credentials on our own systems when payment processing is handled by a third-party payment provider.</p>
+		<h3>Communications</h3>
+		<p>If you contact us, submit a form, send an email, or communicate with us through our platform, we may collect the information contained in those communications.</p>
+		<h2>2. Information Collected Automatically</h2>
+		<p>When you visit our website or use our platform, certain information may be collected automatically.</p>
+		<p>This may include:</p>
+		<ul><li>IP address</li><li>Browser type</li><li>Device type</li><li>Operating system</li><li>Pages visited</li><li>Referring website</li><li>Approximate location derived from technical information</li><li>Date and time of access</li><li>Website activity</li><li>Error and diagnostic information</li></ul>
+		<p>This information helps us maintain security, understand how our website is used, and improve our services.</p>
+		<h2>3. Cookies and Similar Technologies</h2>
+		<p>Courssin Tech Institute may use cookies and similar technologies to operate and improve our website.</p>
+		<p>Cookies may be used to:</p>
+		<ul><li>Keep users signed in.</li><li>Remember preferences.</li><li>Maintain secure sessions.</li><li>Understand website usage.</li><li>Improve website performance.</li><li>Help us identify technical problems.</li></ul>
+		<p>You can configure your browser to refuse or delete cookies. However, disabling certain cookies may prevent some features of the website from functioning correctly.</p>
+		<h2>4. How We Use Your Information</h2>
+		<p>We may use personal information to:</p>
+		<ul><li>Create and manage your account.</li><li>Provide access to courses and learning materials.</li><li>Track course progress.</li><li>Process enrollments and payments.</li><li>Issue certificates.</li><li>Communicate with students and tutors.</li><li>Respond to questions and support requests.</li><li>Send account-related emails.</li><li>Send important service notifications.</li><li>Improve our courses and platform.</li><li>Detect and prevent fraud or unauthorized activity.</li><li>Protect the security of our users and systems.</li><li>Maintain and troubleshoot our website.</li><li>Comply with applicable legal obligations.</li></ul>
+		<p>We will not use your personal information for purposes that are incompatible with the purposes described in this Privacy Policy unless permitted or required by applicable law.</p>
+		<h2>5. Emails and Notifications</h2>
+		<p>We may send emails or other communications relating to:</p>
+		<ul><li>Account registration.</li><li>Email verification.</li><li>Password resets.</li><li>Course enrollment.</li><li>Course updates.</li><li>Payment confirmations.</li><li>Certificates.</li><li>Important changes to our services.</li><li>Customer support.</li></ul>
+		<p>Where we send promotional or marketing communications, you may have the option to unsubscribe where applicable.</p>
+		<p>Please note that certain essential service communications may still be sent because they are necessary to operate your account or provide services you requested.</p>
+		<h2>6. How We Share Information</h2>
+		<p>We do not sell your personal information as a business practice.</p>
+		<p>We may share information with trusted third parties when reasonably necessary to provide, maintain, secure, or improve our services.</p>
+		<h3>Technology and Hosting Providers</h3>
+		<p>We may use third-party providers for hosting, databases, authentication, storage, email delivery, analytics, security, and other technical services.</p>
+		<h3>Payment Providers</h3>
+		<p>Payment information may be processed by third-party payment providers to complete transactions.</p>
+		<h3>Tutors and Instructors</h3>
+		<p>Information necessary to provide educational services may be made available to relevant tutors or instructors.</p>
+		<h3>Legal and Regulatory Authorities</h3>
+		<p>We may disclose information where required by law, court order, legal process, or where necessary to protect our rights, users, property, or security.</p>
+		<h3>Business Transfers</h3>
+		<p>If Courssin Tech Institute is involved in a merger, acquisition, restructuring, sale of assets, or similar transaction, personal information may be transferred as part of that transaction, subject to applicable law.</p>
+		<h2>7. Third-Party Services</h2>
+		<p>Our platform may use third-party services to operate certain features.</p>
+		<p>These may include services for:</p>
+		<ul><li>Authentication</li><li>Database management</li><li>Cloud storage</li><li>Payment processing</li><li>Email delivery</li><li>Analytics</li><li>Website hosting</li><li>Security</li><li>Customer support</li></ul>
+		<p>These providers may process information according to their own privacy policies and contractual obligations.</p>
+		<p>Where our platform uses a third-party service, we encourage users to review the applicable provider's privacy policy where appropriate.</p>
+		<h2>8. Supabase and Authentication</h2>
+		<p>Courssin Tech Institute may use <strong>Supabase</strong> or similar technology providers for database, authentication, storage, and related platform functionality.</p>
+		<p>Information associated with your account may therefore be processed through these services to provide secure authentication and operate our learning platform.</p>
+		<p>We configure and use third-party services according to the needs of our platform and applicable security and privacy requirements.</p>
+		<h2>9. How We Protect Your Information</h2>
+		<p>We take reasonable technical and organizational measures to protect personal information against unauthorized access, alteration, disclosure, loss, or destruction.</p>
+		<p>Security measures may include:</p>
+		<ul><li>Secure authentication.</li><li>Access controls.</li><li>Password protection.</li><li>Encryption where appropriate.</li><li>Restricted administrative access.</li><li>Security monitoring.</li><li>Regular maintenance and updates.</li></ul>
+		<p>However, no internet transmission or electronic storage system can be guaranteed to be completely secure.</p>
+		<p>You are also responsible for protecting your account credentials and should not share your password with anyone.</p>
+		<h2>10. How Long We Keep Information</h2>
+		<p>We retain personal information only for as long as reasonably necessary for the purposes described in this Privacy Policy, including:</p>
+		<ul><li>Providing our services.</li><li>Maintaining student records.</li><li>Managing accounts.</li><li>Processing transactions.</li><li>Resolving disputes.</li><li>Preventing fraud.</li><li>Meeting legal, accounting, or regulatory obligations.</li></ul>
+		<p>When information is no longer reasonably required, we may delete, anonymize, or securely dispose of it, subject to applicable legal requirements.</p>
+		<h2>11. Your Privacy Rights</h2>
+		<p>Depending on applicable law, you may have rights relating to your personal information.</p>
+		<p>These may include the right to:</p>
+		<ul><li>Request access to personal information we hold about you.</li><li>Request correction of inaccurate information.</li><li>Request deletion of certain information.</li><li>Request restriction of certain processing.</li><li>Object to certain uses of your information.</li><li>Withdraw consent where processing is based on consent.</li><li>Request information about how your personal information is processed.</li><li>Lodge a complaint with an appropriate data protection authority where applicable.</li></ul>
+		<p>Some requests may be subject to legal or contractual limitations.</p>
+		<p>To exercise a privacy right, contact us using the official contact details provided on our website.</p>
+		<h2>12. Children's Privacy</h2>
+		<p>Our services are not intended to encourage children to provide personal information without appropriate supervision.</p>
+		<p>Where a user is under the age of 18, we recommend that a parent or legal guardian be involved in the registration and use of our services where required or appropriate.</p>
+		<p>If we become aware that personal information has been collected from a child in circumstances where appropriate consent was required but not obtained, we may take reasonable steps to delete that information.</p>
+		<h2>13. Student and Educational Records</h2>
+		<p>Information relating to a student's enrollment, progress, assignments, assessments, and certificates may be retained as part of the student's educational record.</p>
+		<p>We may use this information to:</p>
+		<ul><li>Provide educational services.</li><li>Monitor course progress.</li><li>Verify course completion.</li><li>Issue certificates.</li><li>Provide student support.</li><li>Improve our educational programs.</li></ul>
+		<p>We will take reasonable measures to restrict access to educational records to authorized individuals.</p>
+		<h2>14. User-Generated Content</h2>
+		<p>Users may submit information such as assignments, comments, reviews, questions, projects, profile information, or other content.</p>
+		<p>Please avoid submitting sensitive personal information that is not necessary for your participation in our services.</p>
+		<p>Content posted publicly or shared with other users may be visible to those users. You should consider this before submitting information to areas of the platform that are designed for public or community interaction.</p>
+		<h2>15. Links to Other Websites</h2>
+		<p>Our website may contain links to third-party websites.</p>
+		<p>We are not responsible for the privacy practices, security, or content of websites operated by third parties.</p>
+		<p>We encourage you to review the privacy policies of external websites before providing them with personal information.</p>
+		<h2>16. International Data Processing</h2>
+		<p>Some service providers we use may process or store information in countries outside Nigeria.</p>
+		<p>Where personal information is transferred internationally, we will seek to do so in accordance with applicable data protection requirements and take reasonable steps to protect the information.</p>
+		<h2>17. Data Protection in Nigeria</h2>
+		<p>Courssin Tech Institute intends to handle personal information in accordance with applicable Nigerian data protection requirements, including the <strong>Nigeria Data Protection Act 2023</strong>, where applicable.</p>
+		<p>Where required, we will take appropriate measures relating to lawful processing, transparency, data security, retention, and individual privacy rights.</p>
+		<h2>18. Changes to This Privacy Policy</h2>
+		<p>We may update this Privacy Policy from time to time to reflect changes in our services, technology, legal requirements, or privacy practices.</p>
+		<p>When we make changes, we will update the <strong>"Last Updated"</strong> date at the beginning of this Privacy Policy.</p>
+		<p>We encourage you to review this page periodically.</p>
+		<h2>19. Contact Us</h2>
+		<p>If you have questions about this Privacy Policy, want to exercise a privacy right, or have concerns about how your information is handled, please contact Courssin Tech Institute through the official contact channels provided on our website.</p>
+		<p><strong>Courssin Tech Institute</strong><br>Website: <a href="https://www.courssin.com.ng/">https://www.courssin.com.ng/</a></p>
+		<hr>
+		<p><strong>By using the Courssin Tech Institute website and services, you acknowledge that you have read and understood this Privacy Policy.</strong></p>
+	</section>$privacy$,
+	'',
+	'Privacy Policy | Courssin Tech Institute',
+	'Privacy practices for Courssin Tech Institute.',
+	true
+)
+on conflict (slug) do update set
+	title = excluded.title,
+	html = excluded.html,
+	css = excluded.css,
+	meta_title = excluded.meta_title,
+	meta_description = excluded.meta_description,
+	published = excluded.published,
+	updated_at = now();
 
 insert into public.settings (key, value) values ('hero', '{"label":"Enrolment is open","title":"Practical tech skills, taught by working professionals.","text":"Courssins Technology Institute is an online learning platform in Nigeria for digital skills training: design, development, data, security and professional skills, with mentors, assignments and verified certificates.","primary_text":"Explore courses","secondary_text":"Meet the tutors"}'::jsonb) on conflict (key) do nothing;
 insert into public.settings (key, value) values ('stats', '[{"value":10,"suffix":"+","label":"Professional programmes"},{"value":99,"suffix":"%","label":"Student satisfaction"},{"value":500,"suffix":"+","label":"Learning resources"},{"value":600,"suffix":"+","label":"Learners reached"}]'::jsonb) on conflict (key) do nothing;
 insert into public.settings (key, value) values ('talent', '{"title":"Talent Transformation","text":"We combine live guidance, a purpose-built learning platform and practical projects, so learning turns into skills that employers and clients can see.","cards":[{"icon":"users","title":"Workshops","text":"Hands-on sessions where you build with a tutor beside you."},{"icon":"laptop","title":"Platform","text":"Lessons, assignments and exams in one place, on any device.","highlight":true},{"icon":"target","title":"Targeting","text":"Programmes matched to skills that are in demand."},{"icon":"chart","title":"Impact","text":"Progress tracking that shows exactly where you stand."}]}'::jsonb) on conflict (key) do nothing;
 insert into public.settings (key, value) values ('why', '{"title":"Why Should You Choose Courssins","text":"Everything is designed around one outcome: helping you finish with skills you can prove.","cards":[{"icon":"book","title":"Case Studies","text":"Learn from realistic projects that mirror day-to-day work.","href":"courses.html","cta":"See programmes"},{"icon":"globe","title":"Learn Anywhere","text":"Study from your phone or laptop, wherever you are.","href":"signup.html","cta":"Create account","active":true},{"icon":"chat","title":"Discussion Session","text":"Ask questions and compare ideas in guided group sessions.","href":"contact.html","cta":"Ask a question"},{"icon":"calendar","title":"Schedule With Mentor","text":"Book time with tutors for feedback on your work.","href":"tutors.html","cta":"Find a mentor"},{"icon":"award","title":"Best Certificate","text":"Certificates carry a unique number anyone can verify online.","href":"certificate-verify.html","cta":"Verify a certificate"},{"icon":"upload","title":"Upload Portfolio","text":"Submit your work for review and build a portfolio as you learn.","href":"dashboard.html","cta":"Open dashboard"}]}'::jsonb) on conflict (key) do nothing;
 insert into public.settings (key, value) values ('membership', '{"title":"Join Membership And Connect To Every Member","text":"Get course announcements, study tips and new resources in your inbox. No spam, unsubscribe any time."}'::jsonb) on conflict (key) do nothing;
-insert into public.settings (key, value) values ('site', '{"name":"Courssins Technology Institute","description":"Courssins Technology Institute is an online technology and professional skills institute in Nigeria, offering practical courses taught by working professionals.","email":"support.courssintech@gmail.com","phone":"","address":"Online, Nigeria","socials":{"facebook":"https://www.facebook.com/","instagram":"https://www.instagram.com/","x":"https://x.com/","linkedin":"https://www.linkedin.com/"}}'::jsonb) on conflict (key) do update set value = settings.value || jsonb_build_object('email', excluded.value->>'email');
+insert into public.settings (key, value) values ('site', '{"name":"Courssins Technology Institute","description":"Courssins Technology Institute is an online technology and professional skills institute in Nigeria, offering practical courses taught by working professionals.","email":"support.courssintech@gmail.com","phone":"","address":"Online, Nigeria","socials":{"facebook":"https://www.facebook.com/","instagram":"https://www.instagram.com/courssintechinstitute?stkn=MXNwZDM5amlrbzh2cQ==","x":"https://x.com/","linkedin":"https://www.linkedin.com/"}}'::jsonb) on conflict (key) do update set value = settings.value || jsonb_build_object('email', excluded.value->>'email', 'socials', coalesce(settings.value->'socials', '{}'::jsonb) || jsonb_build_object('instagram', excluded.value #>> '{socials,instagram}'));
 insert into public.settings (key, value) values ('certificate', '{"signatory":"Director of Studies","organisation":"Courssins Technology Institute"}'::jsonb) on conflict (key) do nothing;

@@ -18,19 +18,34 @@ courssins/
   supabase/
     schema.sql                 tables, RLS policies, RPC functions, storage bucket
     seed.sql                   sample courses, tutors, articles, library, settings, terms/privacy
+    migrations/                 additive upgrades for tutor assignments, users and private resources
+    functions/admin-users, resend-notifications       account management and email alerts
     functions/paystack-initialize, paystack-webhook   payment gateway (Edge Functions)
   scripts/  generate-seed.mjs  build-pages.py  make-images.py   (optional regeneration helpers)
 ```
 
 ## 1. Set up Supabase (about 10 minutes)
 1. Create a project at supabase.com.
-2. **SQL Editor**: paste and run `supabase/schema.sql`, then run `supabase/seed.sql`.
-  For an existing project, rerun the updated `supabase/seed.sql` to refresh the saved support email without replacing other site settings.
+2. **SQL Editor**: on a fresh, dedicated project, paste and run `supabase/schema.sql`, then run `supabase/seed.sql`. Do not run the baseline schema on a shared or established database: it recreates policies across the `public` schema.
+  For an existing Courssins installation, run the files in `supabase/migrations/` in filename order, then run `supabase/seed.sql` if you need the sample content. Back up the database first.
 3. Copy `.env.example` to `.env` and fill in your real values. The repo uses `scripts/link-env.mjs` to generate `public/assets/js/config.js` automatically from those environment variables before Vercel deploys the site. These two values are meant to be public. **Never** paste the `service_role` key anywhere in `public/`.
 4. **Authentication > URL Configuration**: set Site URL to `https://courssin.com.ng` and add `https://courssin.com.ng/login.html` to Redirect URLs (needed for email confirmation and password reset). Configure an SMTP provider for production email volume. Set the sender/support address to `support.courssintech@gmail.com` where appropriate.
 5. Sign up on the website, then make yourself Super Admin by running this in the SQL Editor:
    `update public.profiles set role = 'super_admin' where email = 'you@example.com';`
    Log in again and you are sent to `/admin`.
+6. **Auth email delivery**: configure Supabase Auth SMTP and allow `https://courssin.com.ng/login.html` as a redirect URL. Tutor and admin invitations use this link for first-password setup; password resets use the same configured email provider.
+7. Deploy the account-management function after applying the migrations and set its public redirect origin:
+  ```
+  supabase secrets set SITE_URL=https://courssin.com.ng
+  supabase functions deploy admin-users
+  ```
+  It checks the caller's Super Admin role itself; `SUPABASE_SERVICE_ROLE_KEY` stays in the Supabase Edge Function environment and must never be added to browser config.
+8. **Contact and membership email alerts**: verify a sending domain in Resend, then configure the new Resend API key, the exact inbox/alias you want to receive alerts, and a sender address on that verified domain as Supabase Edge Function secrets. For example:
+  ```
+  supabase secrets set RESEND_API_KEY=<rotated-key> CONTACT_NOTIFY_EMAIL=<anything>@aideuvorou.resend.app RESEND_FROM_EMAIL="Courssins Website <notifications@your-verified-domain>"
+  supabase functions deploy resend-notifications --no-verify-jwt
+  ```
+  Replace each placeholder with a valid value. `<real-inbox>` must be an address or alias that is actually configured to receive mail; a wildcard address is not a destination. The Resend API key and destination are used only by the Edge Function, never by browser code. Contact submissions and new membership signups are saved first; notifications are rate-limited and duplicate sends are suppressed.
 
 ## 2. Deploy to Vercel
 Import the folder (or push to GitHub and import). Framework preset: **Other**. `vercel.json` runs `node scripts/link-env.mjs` before deployment and serves the generated `public` folder. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SITE_URL=https://courssin.com.ng`, and `PAYMENT_INIT_URL=https://ohkrwdmiqlkjcsnzbmma.supabase.co/functions/v1/paystack-initialize` in Vercel Environment Variables (and in `.env` for local development). Configure the custom domain in Vercel and update Supabase Authentication > URL Configuration with the Site URL and redirect URL above.
@@ -52,11 +67,11 @@ Set the Paystack webhook URL to `https://<project>.supabase.co/functions/v1/pays
 | Role | Can do (enforced by database policies, not by the browser) |
 |---|---|
 | student | read own profile, enrolments, payments, results, certificates; submit assignments/exams; mark lessons done |
-| tutor | manage modules, lessons, assignments, exams and grade submissions **for courses assigned to them** (link the tutor's login in Admin > Tutors) |
+| tutor | manage modules, lessons, private course resources, assignments, exams, grade submissions, and view enrolled students **for courses assigned to them** |
 | admin | everything above plus students, courses, tutors, payments, certificates, events, library, blog, newsletter, messages |
 | super_admin | also custom pages, website content/settings, and user roles |
 
-Key protections: new accounts are always `student`; only a super admin (or the SQL editor) can change a role; exam answer keys are readable by staff only (students get questions through `get_exam_questions`, and scoring happens in `submit_exam`); certificates are issued by `claim_certificate` only when every lesson, assignment and exam is complete; public certificate verification returns only name, course and dates for an exact certificate number.
+Key protections: public signups always create `student` accounts; tutor/admin accounts are invited by the Super Admin through the server-side Edge Function; role and active-status changes are Super Admin-only. Disabled accounts lose authentication access and tutor course ownership. Private course-resource files are stored separately from public media and signed for active enrollees. Exam answer keys are readable by staff only (students get questions through `get_exam_questions`, and scoring happens in `submit_exam`); certificates are issued by `claim_certificate` only when every lesson, assignment and exam is complete; public certificate verification returns only name, course and dates for an exact certificate number.
 
 Custom pages: admin-written HTML is sanitised (scripts, iframes, forms and event handlers removed) and shown inside a Shadow DOM so page CSS cannot restyle the site. No server-side code is executed.
 

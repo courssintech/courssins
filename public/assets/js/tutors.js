@@ -9,7 +9,7 @@ if (root) {
   const t = await getTutor(qs('id') || '');
   if (!t) root.innerHTML = `<div class="empty"><h3>Tutor not found</h3><a class="btn btn-lime" href="tutors.html">See all tutors</a></div>`;
   else {
-    const taught = (await getCourses()).filter((c) => c.tutor?.slug === t.slug);
+    const taught = (await getCourses()).filter((c) => c.tutors?.some((courseTutor) => courseTutor.slug === t.slug) || c.tutor?.slug === t.slug);
     setMeta({ title: `${t.full_name}, ${t.specialization}`, description: (t.bio || '').slice(0, 155), image: `${CONFIG.SITE_URL}/${t.image_url}`, url: `${CONFIG.SITE_URL}/tutor.html?id=${t.slug}`, type: 'profile' });
     root.innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a href="index.html">Home</a><span>/</span><a href="tutors.html">Tutors</a><span>/</span><span>${esc(t.full_name)}</span></nav>
     <div class="profile-grid" style="margin-top:28px"><div class="profile-photo">${img(t.image_url, `Portrait of ${t.full_name}`, { w: 480, h: 560, lazy: false })}</div>

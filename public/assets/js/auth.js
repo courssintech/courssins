@@ -16,15 +16,26 @@ const offline = () => { const a = $('authAlert') || $('forgotAlert'); if (!confi
 offline();
 
 async function redirectAfterLogin() {
-  const p = await getProfile(true); const next = safeNext(qs('next'));
+  const p = await getProfile(true);
+  if (p?.is_active === false) {
+    await supabase.auth.signOut();
+    alertBox($('authAlert'), 'This account is disabled. Contact an administrator for help.');
+    return;
+  }
+  const next = safeNext(qs('next'));
   location.replace(next && !(next.startsWith('admin') && p.role === 'student') ? next : homeFor(p.role));
 }
 
 if (page === 'login') {
   const panels = { login: $('loginPanel'), forgot: $('forgotPanel'), reset: $('resetPanel') };
   const show = (k) => Object.entries(panels).forEach(([n, el]) => (el.hidden = n !== k));
-  if (configured) { if (await getSession() && !location.hash.includes('type=recovery')) redirectAfterLogin(); }
-  if (configured) supabase.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY') show('reset'); });
+  if (qs('disabled') === '1') alertBox($('authAlert'), 'This account is disabled. Contact an administrator for help.');
+  const passwordSetup = /type=(recovery|invite)/.test(location.hash);
+  if (configured) {
+    if (passwordSetup && await getSession()) show('reset');
+    else if (await getSession()) redirectAfterLogin();
+  }
+  if (configured) supabase.auth.onAuthStateChange((ev) => { if (ev === 'PASSWORD_RECOVERY' || (ev === 'SIGNED_IN' && /type=invite/.test(location.hash))) show('reset'); });
   $('forgotBtn').addEventListener('click', () => { show('forgot'); $('fEmail').value = $('email').value; $('fEmail').focus(); });
   $('backLogin').addEventListener('click', () => show('login'));
 
