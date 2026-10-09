@@ -46,6 +46,17 @@ async function initFooter() {
   const d = document.getElementById('footDesc'); if (d && site.description) d.textContent = site.description;
   const so = document.getElementById('footSocials'); if (so) so.innerHTML = socialLinks(site.socials);
 }
+async function showCampaigns() {
+  if (!configured || document.querySelector('[data-ad-overlay]')) return;
+  const { data, error } = await supabase.from('advertisements').select('id,title,description,media_type,media_url,image_url,button_text,target_url').eq('active', true).order('created_at', { ascending: false }).limit(5);
+  if (error || !data?.length) return;
+  const safeLink = (value) => { try { const u = new URL(value, location.href); return ['http:', 'https:'].includes(u.protocol) ? u.href : ''; } catch { return ''; } };
+  const overlay = document.createElement('div'); overlay.dataset.adOverlay = '1';
+  Object.assign(overlay.style, { position: 'fixed', inset: '0', zIndex: '9998', background: 'rgba(9,15,22,.76)', display: 'grid', placeItems: 'center', padding: '18px' });
+  overlay.innerHTML = `<section role="dialog" aria-modal="true" aria-label="Current advertisements" style="position:relative;background:var(--paper,#fff);color:var(--ink,#17212b);border-radius:16px;padding:26px;max-width:1120px;width:100%;max-height:90vh;overflow:auto"><button type="button" data-ad-close aria-label="Close advertisements" style="position:sticky;float:right;top:0;border:0;border-radius:50%;width:42px;height:42px;font-size:25px;cursor:pointer;z-index:2">×</button><h2 style="margin:0 52px 18px 0">Updates from Courssins</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px">${data.map((ad) => { const media = ad.media_url || ad.image_url; const href = safeLink(ad.target_url); const visual = media ? (ad.media_type === 'video' ? `<video src="${esc(media)}" controls muted playsinline style="display:block;width:100%;max-height:260px;object-fit:cover"></video>` : `<img src="${esc(media)}" alt="${esc(ad.title)}" style="display:block;width:100%;max-height:260px;object-fit:cover">`) : ''; return `<article style="border:1px solid var(--line,#ddd);border-radius:12px;overflow:hidden">${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">${visual}<div style="padding:14px"><h3>${esc(ad.title)}</h3><p>${esc(ad.description || '')}</p></div></a>` : `${visual}<div style="padding:14px"><h3>${esc(ad.title)}</h3><p>${esc(ad.description || '')}</p></div>`}</article>`; }).join('')}</div></section>`;
+  document.body.append(overlay);
+  const close = () => overlay.remove(); overlay.querySelector('[data-ad-close]').addEventListener('click', close); overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); }); addEventListener('keydown', function escAd(event) { if (event.key === 'Escape' && overlay.isConnected) { close(); removeEventListener('keydown', escAd); } });
+}
 export function bindNewsletter(root = document) {
   root.querySelectorAll('form[data-newsletter]').forEach((f) => {
     if (f.dataset.bound) return; f.dataset.bound = '1';
@@ -81,6 +92,7 @@ async function boot() {
   initHeader(); authState(); initFooter(); bindNewsletter(); initFx(); pageTransitions();
   document.querySelectorAll('[data-year]').forEach((e) => (e.textContent = new Date().getFullYear()));
   requestAnimationFrame(() => document.body.classList.add('is-ready'));
+  showCampaigns();
   if (!configured) console.info('[courssins] Supabase is not configured yet: showing sample content. Add your keys in assets/js/config.js.');
 }
 boot();

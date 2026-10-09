@@ -14,7 +14,7 @@ const E = {
     fields: [{ k: 'full_name', l: 'Full name', req: 1 }, { k: 'interest', l: 'Programme of interest' }] },
   users: { g: 'People', min: SU, t: 'Users', table: 'profiles', ic: 'users', order: ['created_at', false], create: false, del: false,
     cols: [['full_name', 'Name'], ['email', 'Email'], ['role', 'Role'], ['is_active', 'Active'], ['created_at', 'Joined']],
-    fields: [{ k: 'full_name', l: 'Full name', ro: 1 }, { k: 'email', l: 'Email', ro: 1 }, { k: 'role', l: 'Role', type: 'select', opts: ['student', 'tutor', 'admin', 'super_admin'], req: 1, help: 'Tutors can manage content for courses assigned to them. Admins manage most content. Super admins also manage pages, settings and roles.' }] },
+    fields: [{ k: 'full_name', l: 'Full name', ro: 1 }, { k: 'email', l: 'Email', ro: 1 }, { k: 'phone', l: 'Phone' }, { k: 'address', l: 'Address' }, { k: 'avatar_url', l: 'Profile photo', type: 'image' }, { k: 'role', l: 'Role', type: 'select', opts: ['student', 'tutor', 'admin', 'super_admin'], req: 1, help: 'Tutors can manage content for courses assigned to them. Admins manage most content. Super admins also manage pages, settings and roles.' }] },
   tutors: { g: 'People', min: A, t: 'Tutors', table: 'tutors', ic: 'user', order: ['sort_order', true], slugFrom: 'full_name',
     cols: [['full_name', 'Name'], ['specialization', 'Specialisation'], ['published', 'Published', boolCol]],
     fields: [{ k: 'full_name', l: 'Full name', req: 1 }, { k: 'slug', l: 'URL slug', help: 'Auto-generated from the name if left empty.' }, { k: 'title', l: 'Professional title' }, { k: 'specialization', l: 'Specialisation' }, { k: 'bio', l: 'Biography', type: 'textarea' }, { k: 'experience', l: 'Experience', type: 'textarea' },
@@ -23,20 +23,20 @@ const E = {
   courses: { g: 'Learning', min: A, t: 'Courses', table: 'courses', ic: 'book', order: ['sort_order', true], slugFrom: 'title',
     cols: [['title', 'Title'], ['category', 'Category'], ['duration', 'Duration'], ['price', 'Price', (v, r) => money(v, r.currency)], ['tutor_ids', 'Tutors'], ['published', 'Published', boolCol]],
     fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'slug', l: 'URL slug' }, { k: 'category', l: 'Category' }, { k: 'icon', l: 'Icon', type: 'select', opts: ICONS }, { k: 'short_description', l: 'Short description', type: 'textarea' }, { k: 'description', l: 'Full description', type: 'textarea' }, { k: 'duration', l: 'Duration (e.g. 8 weeks)' }, { k: 'price', l: 'Price', type: 'number', def: 0, req: 1, help: 'Use 0 for a free course (unlocks immediately).' }, { k: 'currency', l: 'Currency', def: 'NGN' },
-      { k: 'tutor_ids', l: 'Assigned tutors', type: 'refs', ref: ['tutors', 'full_name'], help: 'Select every tutor assigned to this course.' }, { k: 'image_url', l: 'Course image', type: 'image' }, { k: 'outcomes', l: 'Learning outcomes (one per line)', type: 'lines' }, { k: 'requirements', l: 'Requirements (one per line)', type: 'lines' }, { k: 'faqs', l: 'FAQs (JSON)', type: 'json', help: 'Example: [{"q":"Question?","a":"Answer."}]' },
+      { k: 'lessons_start_at', l: 'Lessons and materials start date', type: 'datetime', help: 'Students can see course outlines before this date. Lessons and materials unlock at this time.' }, { k: 'tutor_ids', l: 'Assigned tutors', type: 'refs', ref: ['tutors', 'full_name'], help: 'Select every tutor assigned to this course.' }, { k: 'image_url', l: 'Course image', type: 'image' }, { k: 'outcomes', l: 'Learning outcomes (one per line)', type: 'lines' }, { k: 'requirements', l: 'Requirements (one per line)', type: 'lines' }, { k: 'faqs', l: 'FAQs (JSON)', type: 'json', help: 'Example: [{"q":"Question?","a":"Answer."}]' },
       { k: 'assessment_info', l: 'Assessment information', type: 'textarea' }, { k: 'certificate_info', l: 'Certificate information', type: 'textarea' }, { k: 'featured', l: 'Show on homepage', type: 'check' }, { k: 'published', l: 'Published', type: 'check', def: true }, { k: 'sort_order', l: 'Display order', type: 'number', def: 0 }] },
   modules: { g: 'Learning', min: T, t: 'Course modules', table: 'course_modules', ic: 'stack', order: ['position', true],
     cols: [['course_id', 'Course'], ['position', '#'], ['title', 'Title']],
     fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'summary', l: 'Summary', type: 'textarea' }, { k: 'topics', l: 'Topics (one per line)', type: 'lines' }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
   lessons: { g: 'Learning', min: T, t: 'Lessons', table: 'lessons', ic: 'play', order: ['position', true],
     cols: [['title', 'Title'], ['course_id', 'Course'], ['is_preview', 'Free preview', boolCol], ['position', '#']],
-    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'content', l: 'Lesson notes', type: 'textarea' }, { k: 'video_url', l: 'Video link (https)' }, { k: 'duration_min', l: 'Duration (minutes)', type: 'number' }, { k: 'is_preview', l: 'Free preview (visible without enrolling)', type: 'check' }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
+    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'content', l: 'Lesson notes', type: 'textarea' }, { k: 'video_url', l: 'Video URL (YouTube, Vimeo, or direct HTTPS link)' }, { k: 'video_path', l: 'Upload lesson video (optional)', type: 'privateFile', maxSize: 500 * 1024 * 1024 }, { k: 'duration_min', l: 'Duration (minutes)', type: 'number' }, { k: 'is_preview', l: 'Free preview (visible without enrolling)', type: 'check' }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
   resources: { g: 'Learning', min: T, t: 'Course resources', table: 'course_resources', ic: 'file', order: ['created_at', false],
     cols: [['title', 'Title'], ['course_id', 'Course'], ['resource_type', 'Type'], ['published', 'Published', boolCol]],
     fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module (optional)', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'resource_type', l: 'Resource type', type: 'select', opts: ['video', 'pdf', 'note', 'assignment'], req: 1 }, { k: 'description', l: 'Description or instructions', type: 'textarea' }, { k: 'object_path', l: 'Private uploaded file', type: 'privateFile' }, { k: 'external_url', l: 'External video or file URL' }, { k: 'published', l: 'Visible to enrolled students', type: 'check', def: true }] },
   assignments: { g: 'Learning', min: T, t: 'Assignments', table: 'assignments', ic: 'file', order: ['position', true],
-    cols: [['title', 'Title'], ['course_id', 'Course'], ['max_score', 'Max score']],
-    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'max_score', l: 'Maximum score', type: 'number', def: 100 }, { k: 'due_days', l: 'Days allowed (optional)', type: 'number' }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
+    cols: [['title', 'Title'], ['course_id', 'Course'], ['is_project', 'Project', boolCol], ['due_at', 'Submission deadline'], ['max_score', 'Max score']],
+    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'attachment_url', l: 'Assignment file or website link' }, { k: 'is_project', l: 'Project (must be tutor-checked before certificate)', type: 'check' }, { k: 'due_at', l: 'Submission deadline', type: 'datetime' }, { k: 'max_score', l: 'Maximum score', type: 'number', def: 100 }, { k: 'due_days', l: 'Days allowed (optional)', type: 'number' }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
   discussions: { g: 'Learning', min: T, t: 'Course discussions', table: 'course_discussions', ic: 'chat', order: ['created_at', false], create: false, edit: false,
     cols: [['course_id', 'Course'], ['lesson_id', 'Section'], ['author_name', 'Author'], ['body', 'Message'], ['created_at', 'Posted']],
     fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'lesson_id', l: 'Section', type: 'ref', ref: ['lessons', 'title'], opt: 1 }, { k: 'body', l: 'Message', type: 'textarea', req: 1 }] },
@@ -50,14 +50,14 @@ const E = {
     cols: [['assignment_id', 'Assignment'], ['user_id', 'Student'], ['file_path', 'Uploaded file'], ['status', 'Status'], ['score', 'Score'], ['submitted_at', 'Submitted']],
     before: (v) => ({ ...v, status: v.score !== null ? 'graded' : 'submitted', graded_at: v.score !== null ? new Date().toISOString() : null }),
     fields: [{ k: 'assignment_id', l: 'Assignment', type: 'ref', ref: ['assignments', 'title'], ro: 1 }, { k: 'user_id', l: 'Student', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }, { k: 'file_path', l: 'Uploaded file', type: 'privateAsset', ro: 1 }, { k: 'content', l: 'Answer', type: 'textarea', ro: 1 }, { k: 'link_url', l: 'Link', ro: 1 }, { k: 'score', l: 'Score', type: 'number' }, { k: 'feedback', l: 'Feedback', type: 'textarea' }] },
-  exams: { g: 'Learning', min: T, t: 'Examinations', table: 'exams', ic: 'quiz',
+  exams: { g: 'Learning', min: T, t: 'Quizzes', table: 'exams', ic: 'quiz',
     cols: [['title', 'Title'], ['course_id', 'Course'], ['pass_mark', 'Pass mark'], ['published', 'Published', boolCol]],
-    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module (leave blank for final)', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'is_final', l: 'Final course assessment', type: 'check', help: 'Final assessments require 15 questions. Module assessments require 7.' }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'duration_min', l: 'Duration (minutes)', type: 'number', def: 13, help: 'The timer starts when a student begins. Set the final duration here too.' }, { k: 'pass_mark', l: 'Pass mark (%)', type: 'number', def: 50 }, { k: 'published', l: 'Published', type: 'check', def: true }] },
-  questions: { g: 'Learning', min: T, t: 'Exam questions', table: 'exam_questions', ic: 'list', order: ['position', true],
-    cols: [['exam_id', 'Exam'], ['position', '#'], ['question', 'Question']],
-    fields: [{ k: 'exam_id', l: 'Exam', type: 'ref', ref: ['exams', 'title'], req: 1 }, { k: 'question', l: 'Question', type: 'textarea', req: 1 }, { k: 'options', l: 'Answer options (one per line)', type: 'lines', req: 1 }, { k: 'correct_index', l: 'Correct option number', type: 'number', def: 0, req: 1, help: 'Count from 1: 1 = the first option listed.', off: 1 }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
-  results: { g: 'Learning', min: T, t: 'Exam results', table: 'exam_results', ic: 'chart', order: ['taken_at', false], create: false, edit: false,
-    cols: [['exam_id', 'Exam'], ['user_id', 'Student'], ['score', 'Score %'], ['passed', 'Passed', boolCol], ['taken_at', 'Taken']], fields: [{ k: 'exam_id', l: 'Exam', type: 'ref', ref: ['exams', 'title'], ro: 1 }, { k: 'user_id', l: 'Student', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }] },
+    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module (leave blank for final)', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'is_final', l: 'Final course quiz', type: 'check', help: 'Final quizzes require 15 questions. Module quizzes require 7.' }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'duration_min', l: 'Quiz timer', type: 'number', def: 13, ro: 1, help: 'All quizzes are timed for 13 minutes.' }, { k: 'pass_mark', l: 'Pass mark (%)', type: 'number', def: 50 }, { k: 'published', l: 'Published', type: 'check', def: true }] },
+  questions: { g: 'Learning', min: T, t: 'Quiz questions', table: 'exam_questions', ic: 'list', order: ['position', true],
+    cols: [['exam_id', 'Quiz'], ['position', '#'], ['question', 'Question']],
+    fields: [{ k: 'exam_id', l: 'Quiz', type: 'ref', ref: ['exams', 'title'], req: 1 }, { k: 'question', l: 'Question', type: 'textarea', req: 1 }, { k: 'options', l: 'Answer options (one per line)', type: 'lines', req: 1 }, { k: 'correct_index', l: 'Correct option number', type: 'number', def: 0, req: 1, help: 'Count from 1: 1 = the first option listed.', off: 1 }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
+  results: { g: 'Learning', min: T, t: 'Quiz results', table: 'exam_results', ic: 'chart', order: ['taken_at', false], create: false, edit: false,
+    cols: [['exam_id', 'Quiz'], ['user_id', 'Student'], ['score', 'Score %'], ['passed', 'Passed', boolCol], ['taken_at', 'Taken']], fields: [{ k: 'exam_id', l: 'Quiz', type: 'ref', ref: ['exams', 'title'], ro: 1 }, { k: 'user_id', l: 'Student', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }] },
   enrollments: { g: 'Learning', min: A, t: 'Enrolments', table: 'enrollments', ic: 'users', order: ['enrolled_at', false],
     before: (v) => ({ ...v, activated_at: v.status === 'active' ? new Date().toISOString() : null }),
     cols: [['user_id', 'Student'], ['course_id', 'Course'], ['status', 'Status'], ['enrolled_at', 'Enrolled']],
@@ -70,15 +70,19 @@ const E = {
     before: (v) => ({ ...v, certificate_number: v.certificate_number || `CTI-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}` }),
     cols: [['certificate_number', 'Number'], ['student_name', 'Student'], ['course_title', 'Course'], ['status', 'Status'], ['issued_at', 'Issued']],
     fields: [{ k: 'user_id', l: 'Student account', type: 'ref', ref: ['profiles', 'full_name'], req: 1, lockEdit: 1 }, { k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1, lockEdit: 1 }, { k: 'student_name', l: 'Name on certificate', req: 1 }, { k: 'course_title', l: 'Course title on certificate', req: 1 }, { k: 'certificate_number', l: 'Certificate number', help: 'Generated automatically if left empty.' }, { k: 'status', l: 'Status', type: 'select', opts: ['valid', 'revoked'], def: 'valid' }] },
+  staff_id_cards: { g: 'People', min: A, t: 'Staff ID cards', table: 'staff_id_cards', ic: 'user', order: ['issued_at', false], create: false, del: false,
+    cols: [['card_number', 'Card number'], ['user_id', 'Staff member'], ['issue_year', 'Issue year'], ['status', 'Status'], ['issued_at', 'Issued']],
+    fields: [{ k: 'card_number', l: 'Card number', ro: 1 }, { k: 'user_id', l: 'Staff member', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }, { k: 'issue_year', l: 'Issue year', type: 'number', ro: 1 }, { k: 'status', l: 'Status', type: 'select', opts: ['valid', 'revoked'], req: 1 }, { k: 'revoked_reason', l: 'Revocation reason', type: 'textarea' }] },
   events: { g: 'Content', min: A, t: 'Events', table: 'events', ic: 'calendar', order: ['starts_at', false],
     cols: [['title', 'Title'], ['starts_at', 'Starts'], ['location', 'Location'], ['published', 'Published', boolCol]],
-    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'starts_at', l: 'Starts', type: 'datetime' }, { k: 'location', l: 'Location' }, { k: 'url', l: 'Link' }, { k: 'image_url', l: 'Image', type: 'image' }, { k: 'published', l: 'Published', type: 'check', def: true }] },
+    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'starts_at', l: 'Date and time', type: 'datetime' }, { k: 'location_type', l: 'Location format', type: 'select', opts: ['physical', 'virtual'], def: 'physical' }, { k: 'location', l: 'Venue or virtual meeting link' }, { k: 'url', l: 'Event details / booking link' }, { k: 'fee', l: 'Ticket fee (0 for free)', type: 'number', def: 0 }, { k: 'currency', l: 'Currency', def: 'NGN' }, { k: 'capacity', l: 'Ticket capacity (optional)', type: 'number' }, { k: 'image_url', l: 'Poster image', type: 'image' }, { k: 'published', l: 'Published', type: 'check', def: true }] },
   advertisements: { g: 'Content', min: A, t: 'Advertisements', table: 'advertisements', ic: 'sparkle', order: ['created_at', false],
     cols: [['title', 'Title'], ['active', 'Active', boolCol], ['starts_at', 'Starts'], ['ends_at', 'Ends']],
-    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'image_url', l: 'Promotional image', type: 'image' }, { k: 'button_text', l: 'Button label' }, { k: 'target_url', l: 'Destination URL' }, { k: 'active', l: 'Active', type: 'check' }, { k: 'starts_at', l: 'Starts', type: 'datetime' }, { k: 'ends_at', l: 'Ends', type: 'datetime' }] },
+    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'media_type', l: 'Media format', type: 'select', opts: ['image', 'video'], def: 'image' }, { k: 'media_url', l: 'Poster, flyer or video file', type: 'media', req: 1, help: 'Image or video up to 500 MB.' }, { k: 'button_text', l: 'Button label' }, { k: 'target_url', l: 'Destination URL' }, { k: 'active', l: 'Active', type: 'check' }, { k: 'starts_at', l: 'Starts', type: 'datetime' }, { k: 'ends_at', l: 'Ends', type: 'datetime' }] },
   library: { g: 'Content', min: A, t: 'Library', table: 'library', ic: 'stack', order: ['created_at', false],
     cols: [['title', 'Title'], ['type', 'Type'], ['access', 'Access'], ['published', 'Published', boolCol]],
-    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'type', l: 'Type', type: 'select', opts: ['book', 'pdf', 'material', 'video', 'document'], def: 'material' }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'url', l: 'File or link', type: 'file', req: 1, help: 'Paste a link or upload a PDF, document or video (max 25 MB).' }, { k: 'cover_url', l: 'Cover image', type: 'image' }, { k: 'course_id', l: 'Related course', type: 'ref', ref: ['courses', 'title'], opt: 1 }, { k: 'access', l: 'Who can open it', type: 'select', opts: ['public', 'members'], def: 'public' }, { k: 'published', l: 'Published', type: 'check', def: true }] },
+    fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'type', l: 'Type', type: 'select', opts: ['book', 'pdf', 'material', 'video', 'document'], def: 'book' }, { k: 'description', l: 'Description', type: 'textarea' }, { k: 'object_path', l: 'PDF book upload (private for paid items)', type: 'libraryFile' }, { k: 'url', l: 'External website URL (free items)', help: 'Paid books must be uploaded as a private PDF.' }, { k: 'preview_urls', l: 'First six page previews', type: 'json', def: [] }, { k: 'cover_url', l: 'Cover image', type: 'image' }, { k: 'course_id', l: 'Related course', type: 'ref', ref: ['courses', 'title'], opt: 1 }, { k: 'pricing', l: 'Price type', type: 'select', opts: ['free', 'paid'], def: 'free' }, { k: 'price', l: 'Amount (0 for free)', type: 'number', def: 0 }, { k: 'currency', l: 'Currency', def: 'NGN' }, { k: 'access', l: 'Visibility', type: 'select', opts: ['public', 'members'], def: 'public' }, { k: 'published', l: 'Published', type: 'check', def: true }] },
+  event_tickets: { g: 'Events', min: A, t: 'Event tickets', table: 'event_tickets', ic: 'calendar', order: ['created_at', false], create: false, edit: false, del: false, cols: [['ticket_code', 'Verification code'], ['event_id', 'Event'], ['user_id', 'Attendee'], ['status', 'Status'], ['created_at', 'Booked']], fields: [{ k: 'ticket_code', l: 'Ticket code', ro: 1 }, { k: 'event_id', l: 'Event', type: 'ref', ref: ['events', 'title'], ro: 1 }, { k: 'user_id', l: 'Attendee', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }, { k: 'status', l: 'Status', ro: 1 }] },
   blog: { g: 'Content', min: A, t: 'Blog posts', table: 'blog_posts', ic: 'edit', order: ['published_at', false], slugFrom: 'title', preview: { html: 'content' },
     cols: [['title', 'Title'], ['category', 'Category'], ['author', 'Author'], ['published', 'Published', boolCol], ['published_at', 'Date']],
     fields: [{ k: 'title', l: 'Title', req: 1 }, { k: 'slug', l: 'URL slug' }, { k: 'excerpt', l: 'Short description', type: 'textarea' }, { k: 'content', l: 'Article body (HTML: p, h2, ul, img, a)', type: 'textarea', tall: 1 }, { k: 'category', l: 'Category' }, { k: 'author', l: 'Author' }, { k: 'image_url', l: 'Article image', type: 'image' }, { k: 'published_at', l: 'Publication date', type: 'datetime' }, { k: 'published', l: 'Published (untick to unpublish)', type: 'check' }] },
@@ -112,11 +116,16 @@ if (!configured) {
   const me = await requireAuth(['tutor', 'admin', 'super_admin']);
   $('whoami').textContent = `${me.full_name || me.email} · ${me.role.replace('_', ' ')}`;
   const myRank = rank[me.role];
-  const allowed = Object.entries(E).filter(([, e]) => myRank >= need[e.min]);
+  const allowed = Object.entries(E).filter(([key, e]) => myRank >= need[e.min] && !['exams', 'questions', 'results'].includes(key) && !(me.role === T && key === 'modules'));
   const groups = [...new Set(allowed.map(([, e]) => e.g))];
   const links = [`<button class="side-link" data-v="dash">${icon('grid', '', 18)}Overview</button>`];
   groups.forEach((g) => { links.push(`<div class="side-label">${g}</div>`); if (g === 'Learning') links.push(`<button class="side-link" data-v="builder">${icon('stack', '', 18)}Course builder</button>`); allowed.filter(([, e]) => e.g === g).forEach(([k, e]) => links.push(`<button class="side-link" data-v="${k}">${icon(e.ic, '', 18)}${e.t}</button>`)); });
   if (me.role === T) links.push(`<button class="side-link" data-v="tutor-profile">${icon('user', '', 18)}My tutor profile</button>`);
+  links.push(`<button class="side-link" data-v="staff-inbox">${icon('chat', '', 18)}Staff inbox</button>`);
+  if (myRank >= 2) links.push(`<button class="side-link" data-v="student-id-directory">${icon('user', '', 18)}Student ID cards</button>`);
+  if (me.role === T) links.push(`<button class="side-link" data-v="tutor-groups">${icon('users', '', 18)}Course discussions</button>`);
+  links.push(`<button class="side-link" data-v="staff-id">${icon('user', '', 18)}My staff ID</button>`);
+  if (myRank >= 2) links.push(`<a class="side-link" href="ticket-verify.html">${icon('calendar', '', 18)}Ticket verification</a>`);
   if (myRank >= 3) links.push('<div class="side-label">Site</div>', `<button class="side-link" data-v="site">${icon('settings', '', 18)}Website content</button>`);
   $('sideNav').innerHTML = links.join('');
   $('signOutBtn').addEventListener('click', signOut);
@@ -125,19 +134,34 @@ if (!configured) {
 
   const refCache = {};
   let builderCourseId = null;
+  let assignedCourseIdsCache;
+  async function assignedCourseIds() {
+    if (assignedCourseIdsCache) return assignedCourseIdsCache;
+    const { data: tutorRows } = await supabase.from('tutors').select('id').eq('user_id', me.id);
+    const tutorIds = (tutorRows || []).map((tutor) => tutor.id);
+    if (!tutorIds.length) return (assignedCourseIdsCache = []);
+    const { data: assignments } = await supabase.from('course_tutors').select('course_id').in('tutor_id', tutorIds);
+    return (assignedCourseIdsCache = [...new Set((assignments || []).map((assignment) => assignment.course_id))]);
+  }
   async function refMap(table, label) {
     const key = `${table}.${label}`; if (refCache[key]) return refCache[key];
+    if (table === 'profiles' && me.role === 'tutor') {
+      const { data: students } = await supabase.rpc('get_my_course_students');
+      return (refCache[key] = Object.fromEntries((students || []).map((student) => [student.student_id, student.full_name || '(unnamed)'])));
+    }
     if (table === 'courses' && me.role === 'tutor') {
-      const { data: tutorRows } = await supabase.from('tutors').select('id').eq('user_id', me.id);
-      const tutorIds = (tutorRows || []).map((tutor) => tutor.id);
-      if (!tutorIds.length) return (refCache[key] = {});
-      const { data: assignments } = await supabase.from('course_tutors').select('course_id').in('tutor_id', tutorIds);
-      const courseIds = [...new Set((assignments || []).map((assignment) => assignment.course_id))];
+      const courseIds = await assignedCourseIds();
       if (!courseIds.length) return (refCache[key] = {});
       const { data: courses } = await supabase.from('courses').select(`id,${label}`).in('id', courseIds).limit(1000);
       return (refCache[key] = Object.fromEntries((courses || []).map((course) => [course.id, course[label] || '(unnamed)'])));
     }
-    const { data } = await supabase.from(table).select(`id,${label}`).limit(1000);
+    let query = supabase.from(table).select(`id,${label}`).limit(1000);
+    if (me.role === 'tutor' && ['course_modules', 'lessons', 'assignments', 'exams'].includes(table)) {
+      const courseIds = await assignedCourseIds();
+      if (!courseIds.length) return (refCache[key] = {});
+      query = query.in('course_id', courseIds);
+    }
+    const { data } = await query;
     return (refCache[key] = Object.fromEntries((data || []).map((r) => [r.id, r[label] || '(unnamed)'])));
   }
   const fmt = (col, row, maps) => {
@@ -202,6 +226,10 @@ if (!configured) {
       data = (result.data || []).map((student) => ({ ...student, id: student.student_id, created_at: student.joined_at }));
     } else {
       let q = supabase.from(e.table).select('*').order(e.order[0], { ascending: e.order[1] }).limit(500); if (e.filter) q = e.filter(q);
+      if (me.role === T && ['modules', 'lessons', 'resources', 'assignments', 'exams', 'discussions'].includes(key)) {
+        const courseIds = await assignedCourseIds();
+        q = courseIds.length ? q.in('course_id', courseIds) : q.eq('course_id', '00000000-0000-0000-0000-000000000000');
+      }
       const result = await q; data = result.data; error = result.error;
     }
     if (error) { $('panel').innerHTML = empty('Could not load', error.message); return; }
@@ -260,8 +288,9 @@ if (!configured) {
         return `<div class="field"><label for="${id}">${esc(f.l)}</label><select class="input" id="${id}" multiple size="${Math.min(8, Math.max(3, Object.keys(refOpts[f.k]).length))}" ${dis}>${options}</select>${help}</div>`;
       }
       if (f.type === 'privateFile') {
-        return `<div class="field"><label for="${id}">${esc(f.l)}</label><div style="display:flex;gap:8px"><input class="input" id="${id}" type="text" value="${esc(v ?? '')}" readonly><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload<input type="file" hidden data-private-up="${id}" accept="video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt"></label></div><span class="hint">Private to enrolled students and assigned tutors. Maximum file size: 50 MB.</span></div>`;
+        return `<div class="field"><label for="${id}">${esc(f.l)}</label><div style="display:flex;gap:8px"><input class="input" id="${id}" type="text" value="${esc(v ?? '')}" readonly><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload<input type="file" hidden data-private-up="${id}" accept="${f.k === 'video_path' ? 'video/*' : 'video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt'}"></label></div><span class="hint">Private to enrolled students and assigned tutors. Maximum file size: ${f.maxSize ? '500 MB' : '50 MB'}.</span></div>`;
       }
+      if (f.type === 'libraryFile') return `<div class="field"><label for="${id}">${esc(f.l)}</label><div style="display:flex;gap:8px"><input class="input" id="${id}" value="${esc(v || '')}" readonly><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload PDF<input type="file" hidden data-library-up="${id}" accept="application/pdf,.pdf"></label></div><span class="hint">Uploads use private storage. The first six preview pages are generated as small public images.</span></div>`;
       if (f.type === 'privateAsset') return `<div class="field"><label for="${id}">${esc(f.l)}</label><div style="display:flex;gap:8px"><input class="input" id="${id}" value="${esc(v || '')}" readonly><button class="btn btn-ghost" type="button" data-private-download="${id}" ${v ? '' : 'disabled'}>${icon('download', '', 16)}Download securely</button></div></div>`;
       let ctl;
       if (f.type === 'textarea' || f.type === 'lines' || f.type === 'json') {
@@ -272,22 +301,42 @@ if (!configured) {
       else if (f.type === 'check') return `<label class="check" style="margin-bottom:18px"><input type="checkbox" id="${id}" ${v ? 'checked' : ''} ${dis}> ${esc(f.l)}</label>`;
       else if (f.type === 'datetime') ctl = `<input class="input" id="${id}" type="datetime-local" value="${toLocal(v || (f.k === 'published_at' && !editing ? new Date() : ''))}" ${dis}>`;
       else if (f.type === 'number') ctl = `<input class="input" id="${id}" type="number" step="any" value="${v == null ? '' : (f.off ? Number(v) + 1 : v)}" ${dis}>`;
-      else if (f.type === 'image' || f.type === 'file') ctl = `<div style="display:flex;gap:8px"><input class="input" id="${id}" type="text" value="${esc(v ?? '')}" placeholder="https://… or upload" ${dis}><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload<input type="file" hidden data-up="${id}" accept="${f.type === 'image' ? 'image/*' : '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,video/mp4,video/webm,image/*'}"></label></div>`;
+      else if (f.type === 'image' || f.type === 'file' || f.type === 'media') ctl = `<div style="display:flex;gap:8px"><input class="input" id="${id}" type="text" value="${esc(v ?? '')}" placeholder="https://… or upload" ${dis}><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload<input type="file" hidden data-up="${id}" accept="${f.type === 'image' ? 'image/*' : f.type === 'media' ? 'image/*,video/*' : '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,video/mp4,video/webm,image/*'}"></label></div>`;
       else ctl = `<input class="input" id="${id}" type="text" value="${esc(v ?? '')}" ${dis}>`;
       return `<div class="field"><label for="${id}">${esc(f.l)}${f.req ? ' *' : ''}</label>${ctl}${help}</div>`;
     }).join('');
     const prev = e.preview ? `<button class="btn btn-ghost" id="prevBtn" type="button">Preview</button>` : '';
     const m = modal({ title: `${editing ? (e.readonly ? 'View' : 'Edit') : 'Add'} ${e.t.toLowerCase().replace(/s$/, '')}`, wide: true, body: `<form id="entForm" novalidate>${html}</form>`, actions: e.readonly ? '' : `${prev}<button class="btn btn-lime" id="saveBtn" type="button">Save</button>` });
     m.el.querySelectorAll('[data-up]').forEach((inp) => inp.addEventListener('change', async () => {
-      const f = inp.files[0]; if (!f) return; if (f.size > 25 * 1024 * 1024) return toast('File is larger than 25 MB.', 'err');
+      const f = inp.files[0]; if (!f) return; const mediaField = E[key]?.fields.find((field) => `f_${field.k}` === inp.dataset.up)?.type === 'media'; if (f.size > (mediaField ? 500 : 25) * 1024 * 1024) return toast(mediaField ? 'Ad media must be 500 MB or smaller.' : 'File is larger than 25 MB.', 'err');
       const path = `${key}/${Date.now()}-${f.name.replace(/[^a-z0-9._-]/gi, '_')}`;
       toast('Uploading…'); const { error } = await supabase.storage.from('media').upload(path, f, { upsert: false, contentType: f.type });
       if (error) return toast(`Upload failed: ${error.message}`, 'err');
       m.el.querySelector(`#${inp.dataset.up}`).value = supabase.storage.from('media').getPublicUrl(path).data.publicUrl; toast('Uploaded', 'ok');
     }));
+    m.el.querySelectorAll('[data-library-up]').forEach((input) => input.addEventListener('change', async () => {
+      const file = input.files[0]; if (!file) return;
+      if (file.type !== 'application/pdf' || file.size > 100 * 1024 * 1024) return toast('Choose a PDF up to 100 MB.', 'err');
+      const path = `books/${crypto.randomUUID()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`;
+      toast('Uploading private PDF…'); const { error: uploadError } = await supabase.storage.from('library-files').upload(path, file, { contentType: 'application/pdf' });
+      if (uploadError) return toast(uploadError.message, 'err');
+      m.el.querySelector(`#${input.dataset.libraryUp}`).value = path;
+      try {
+        const pdfjs = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs'); pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+        const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise; const previews = [];
+        for (let pageNo = 1; pageNo <= Math.min(6, pdf.numPages); pageNo += 1) {
+          const page = await pdf.getPage(pageNo), viewport = page.getViewport({ scale: Math.min(1, 1000 / page.getViewport({ scale: 1 }).width) }); const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height; await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', .78)); const previewPath = `library-previews/${crypto.randomUUID()}-${pageNo}.jpg`; const { error } = await supabase.storage.from('media').upload(previewPath, blob, { contentType: 'image/jpeg' }); if (error) throw error; previews.push(supabase.storage.from('media').getPublicUrl(previewPath).data.publicUrl);
+        }
+        m.el.querySelector('#f_preview_urls').value = JSON.stringify(previews); toast('Private PDF and six preview pages uploaded.', 'ok');
+      } catch (previewError) { toast(`PDF uploaded, but preview images could not be generated: ${previewError.message}`, 'err'); }
+    }));
     m.el.querySelectorAll('[data-private-up]').forEach((input) => input.addEventListener('change', async () => {
       const file = input.files[0]; if (!file) return;
-      if (file.size > 50 * 1024 * 1024) return toast('Course resource exceeds the 50 MB limit.', 'err');
+      const field = E[key]?.fields.find((item) => `f_${item.k}` === input.dataset.privateUp);
+      const maxSize = field?.maxSize || 50 * 1024 * 1024;
+      if (file.size > maxSize) return toast(`File exceeds the ${Math.round(maxSize / 1024 / 1024)} MB limit.`, 'err');
+      if (field?.k === 'video_path' && !file.type.startsWith('video/')) return toast('Choose a video file.', 'err');
       const courseId = m.el.querySelector('#f_course_id')?.value;
       if (!courseId) return toast('Select a course before uploading its resource.', 'err');
       const path = `${courseId}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`;
@@ -314,7 +363,7 @@ if (!configured) {
         else if (f.type === 'refs') x = [...el.selectedOptions].map((option) => option.value);
         else x = el.value.trim();
         if (f.type === 'lines') x = x.split('\n').map((s) => s.trim()).filter(Boolean);
-        else if (f.type === 'json') { try { x = x ? JSON.parse(x) : (f.k === 'faqs' ? [] : {}); } catch { errs.push(`${f.l}: not valid JSON`); continue; } }
+        else if (f.type === 'json') { try { x = x ? JSON.parse(x) : (Array.isArray(f.def) ? f.def : (f.k === 'faqs' ? [] : {})); } catch { errs.push(`${f.l}: not valid JSON`); continue; } }
         else if (f.type === 'number') x = x === '' ? null : Number(x) - (f.off ? 1 : 0);
         else if (f.type === 'datetime') x = x ? new Date(x).toISOString() : null;
         else if (f.type === 'ref' || f.type === 'select' || typeof x === 'string') x = x === '' && (f.opt || f.type !== 'select') ? null : x;
@@ -328,10 +377,19 @@ if (!configured) {
         if (!v.object_path && !v.external_url) errs.push('Upload a file or enter an external HTTP(S) URL');
         else if (!validExternal) errs.push('Resource URL must start with https:// or http://');
       }
+      if (key === 'library') {
+        if (!v.object_path && !v.url) errs.push('Upload a PDF or add an external website URL.');
+        if (v.pricing === 'paid' && !v.object_path) errs.push('Paid library items must be uploaded as a private PDF.');
+        if (v.pricing === 'paid' && !(Number(v.price) > 0)) errs.push('Enter a price greater than zero for paid items.');
+        if (v.object_path) v.url = null;
+        if (v.pricing === 'free') v.price = 0;
+      }
       if (key === 'exams') {
         if (v.is_final && v.module_id) errs.push('Final assessments must not be attached to a module');
         if (!v.is_final && !v.module_id) errs.push('Choose a module or mark this as the final assessment');
+        if (Number(v.pass_mark) < 50) errs.push('The minimum passing score is 50%.');
         if (v.is_final) v.module_id = null;
+        v.duration_min = 13;
       }
       if (key === 'certificates') { /* names required above */ }
       if (errs.length) return toast(errs[0], 'err');
@@ -364,12 +422,76 @@ if (!configured) {
 
   async function dash() {
     const c = (t, f) => { let q = supabase.from(t).select('id', { count: 'exact', head: true }); if (f) q = f(q); return q.then((r) => r.count ?? 0); };
+    if (me.role === T) {
+      const ids = await assignedCourseIds();
+      const [{ data: students }, sections, groups] = await Promise.all([
+        supabase.rpc('get_my_course_students'),
+        ids.length ? c('lessons', (q) => q.in('course_id', ids)) : Promise.resolve(0),
+        c('tutor_groups', (q) => q.eq('owner_id', me.id)),
+      ]);
+      const studentCount = new Set((students || []).map((student) => student.student_id)).size;
+      $('panel').innerHTML = `<div class="kpis"><button class="kpi lime" data-v="students"><b>${studentCount}</b><span>Enrolled students</span></button><button class="kpi" data-v="courses"><b>${ids.length}</b><span>Assigned courses</span></button><button class="kpi" data-v="builder"><b>${sections}</b><span>Course sections</span></button><button class="kpi" data-v="tutor-groups"><b>${groups}</b><span>Discussion groups</span></button></div><div class="panel"><h2>Teaching workspace</h2><div class="btn-row"><button class="btn btn-dark" data-v="builder">Build course modules</button><button class="btn btn-outline" data-v="staff-inbox">Open staff inbox</button><button class="btn btn-outline" data-v="tutor-groups">Manage course discussions</button></div></div>`;
+      return;
+    }
     const [st, co, en, pend, sub, msg] = await Promise.all([c('profiles', (q) => q.eq('role', 'student')), c('courses'), c('enrollments', (q) => q.eq('status', 'active')), c('payments', (q) => q.eq('status', 'pending')), c('newsletter_subscribers'), c('contact_messages')]);
     const { data: paid } = await supabase.from('payments').select('amount').eq('status', 'success');
     const tot = (paid || []).reduce((n, p) => n + Number(p.amount), 0);
-    $('panel').innerHTML = `<div class="kpis"><div class="kpi lime"><b>${st}</b><span>Students</span></div><div class="kpi"><b>${co}</b><span>Courses</span></div><div class="kpi"><b>${en}</b><span>Active enrolments</span></div><div class="kpi"><b>${pend}</b><span>Pending payments</span></div></div>
-    <div class="kpis"><div class="kpi"><b>${money(tot)}</b><span>Verified payments</span></div><div class="kpi"><b>${sub}</b><span>Newsletter subscribers</span></div><div class="kpi"><b>${msg}</b><span>Contact messages</span></div></div>
+    $('panel').innerHTML = `<div class="kpis"><button class="kpi lime" data-v="students"><b>${st}</b><span>Students</span></button><button class="kpi" data-v="courses"><b>${co}</b><span>Courses</span></button><button class="kpi" data-v="enrollments"><b>${en}</b><span>Active enrolments</span></button><button class="kpi" data-v="payments"><b>${pend}</b><span>Pending payments</span></button></div>
+    <div class="kpis"><button class="kpi" data-v="payments"><b>${money(tot)}</b><span>Verified payments</span></button><button class="kpi" data-v="subscribers"><b>${sub}</b><span>Newsletter subscribers</span></button><button class="kpi" data-v="messages"><b>${msg}</b><span>Contact messages</span></button></div>
     <div class="panel"><h2>Quick actions</h2><div class="btn-row">${allowed.some(([k]) => k === 'courses') ? '<button class="btn btn-dark" data-v="courses">Manage courses</button>' : ''}${allowed.some(([k]) => k === 'blog') ? '<button class="btn btn-dark" data-v="blog">Write an article</button>' : ''}${allowed.some(([k]) => k === 'payments') ? '<button class="btn btn-dark" data-v="payments">Review payments</button>' : ''}${allowed.some(([k]) => k === 'lessons') ? '<button class="btn btn-dark" data-v="lessons">Add lessons</button>' : ''}</div></div>`;
+  }
+
+  async function staffInbox() {
+    const [{ data: messages, error }, { data: tutors }] = await Promise.all([
+      supabase.from('staff_messages').select('*').order('created_at', { ascending: true }).limit(300),
+      me.role === T ? Promise.resolve({ data: [] }) : supabase.from('profiles').select('id,full_name,email').eq('role', 'tutor').eq('is_active', true).order('full_name'),
+    ]);
+    if (error) { $('panel').innerHTML = empty('Inbox unavailable', error.message); return; }
+    const byId = new Map((messages || []).map((message) => [message.id, message]));
+    $('panel').innerHTML = `<div class="panel"><h2>Staff messages</h2><p class="muted">Admin announcements reach all tutors. Reply to a message to continue its conversation.</p>${(messages || []).map((m) => `<article class="list-item" style="align-items:flex-start"><div class="grow"><strong>${m.sender_id === me.id ? 'You' : m.recipient_id ? (tutors || []).find((t) => t.id === m.sender_id)?.full_name || 'Staff member' : 'Staff message'}${m.recipient_id ? ' · direct' : ' · tutors'}</strong><p style="margin:8px 0">${esc(m.body)}</p>${m.attachment_url ? `<a href="${esc(m.attachment_url)}" target="_blank" rel="noopener">Open attachment</a>` : ''}<small class="muted">${fmtDate(m.created_at)}</small></div>${m.parent_id ? '' : `<button class="btn btn-ghost btn-sm" data-inbox-reply="${m.id}">Reply</button>`}</article>`).join('') || empty('No messages yet', 'Admin and tutor conversations will appear here.')}</div><div class="panel"><h3 id="inboxComposeTitle">${myRank >= 2 ? 'New message' : 'Reply to a message'}</h3><form id="staffMessageForm"><div class="field" ${myRank < 2 ? 'hidden' : ''}><label for="staffRecipient">Send to</label><select class="input" id="staffRecipient"><option value="">All tutors</option>${(tutors || []).map((t) => `<option value="${t.id}">${esc(t.full_name || t.email)}</option>`).join('')}</select></div><div class="field"><label for="staffBody">Message</label><textarea class="input" id="staffBody" required maxlength="5000"></textarea></div><div class="field"><label for="staffAttachment">Attachment link (optional)</label><input class="input" id="staffAttachment" type="url" placeholder="https://"></div><div class="field"><label for="staffFile">Upload media (optional, up to 100 MB)</label><input class="input" id="staffFile" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx"></div><input type="hidden" id="staffParent"><button class="btn btn-lime" type="submit">Send message</button></form></div>`;
+    $('panel').querySelectorAll('[data-inbox-reply]').forEach((button) => button.addEventListener('click', () => { const parent = byId.get(button.dataset.inboxReply); $('staffParent').value = parent.id; $('inboxComposeTitle').textContent = `Reply to ${parent.recipient_id ? 'direct message' : 'tutor thread'}`; $('staffBody').focus(); }));
+    $('staffMessageForm').addEventListener('submit', async (event) => { event.preventDefault(); const body = $('staffBody').value.trim(), file = $('staffFile').files[0]; let attachment_url = $('staffAttachment').value.trim() || null; if (!body && !file) return;
+      if (attachment_url && !/^https?:\/\//i.test(attachment_url)) return toast('Attachment links must begin with http:// or https://.', 'err');
+      if (file) { if (file.size > 100 * 1024 * 1024) return toast('Attachment must be 100 MB or smaller.', 'err'); const path = `tutors/${me.id}/messages/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`; const { error: uploadError } = await supabase.storage.from('media').upload(path, file, { contentType: file.type }); if (uploadError) return toast(uploadError.message, 'err'); attachment_url = supabase.storage.from('media').getPublicUrl(path).data.publicUrl; }
+      let recipient = $('staffRecipient')?.value || null; const parentId = $('staffParent').value || null; const parent = parentId ? byId.get(parentId) : null;
+      if (parent && parent.recipient_id) recipient = parent.sender_id === me.id ? parent.recipient_id : parent.sender_id;
+      const row = { sender_id: me.id, recipient_id: recipient, parent_id: parentId, body: body || 'Shared an attachment', attachment_url };
+      const { error: sendError } = await supabase.from('staff_messages').insert(row); if (sendError) return toast(sendError.message, 'err'); toast('Message sent', 'ok'); staffInbox();
+    });
+  }
+
+  async function tutorGroups(groupId) {
+    const [courseIds, groupResult] = await Promise.all([assignedCourseIds(), supabase.from('tutor_groups').select('*').eq('owner_id', me.id).order('created_at', { ascending: false })]);
+    const groups = groupResult.data || []; const { data: courses } = courseIds.length ? await supabase.from('courses').select('id,title').in('id', courseIds) : { data: [] };
+    $('panel').innerHTML = `<div class="panel"><div class="tools"><div class="grow"><h2>Course discussions</h2><p class="muted">Share updates, media and assignments with enrolled students. Students can react to posts.</p></div><button class="btn btn-lime" id="newTutorGroup">${icon('plus', '', 16)}Create group</button></div>${groups.map((g) => `<button class="btn btn-outline btn-sm" style="margin:4px" data-group="${g.id}">${esc(g.title)}</button>`).join('') || '<p class="muted">Create a group for one of your assigned courses to begin.</p>'}</div>`;
+    $('newTutorGroup')?.addEventListener('click', () => { const m = modal({ title: 'Create course group', body: `<form id="newGroupForm"><div class="field"><label for="groupCourse">Assigned course</label><select class="input" id="groupCourse">${(courses || []).map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join('')}</select></div><div class="field"><label for="groupTitle">Group name</label><input class="input" id="groupTitle" required maxlength="160"></div></form>`, actions: '<button class="btn btn-lime" id="createGroup">Create</button>' });
+      m.el.querySelector('#createGroup').addEventListener('click', async () => { const title = m.el.querySelector('#groupTitle').value.trim(), course_id = m.el.querySelector('#groupCourse').value; if (!course_id || title.length < 2) return toast('Choose a course and enter a group name.', 'err'); const { error } = await supabase.from('tutor_groups').insert({ course_id, owner_id: me.id, title }); if (error) return toast(error.message, 'err'); m.close(); tutorGroups(); }); });
+    $('panel').querySelectorAll('[data-group]').forEach((button) => button.addEventListener('click', () => tutorGroups(button.dataset.group)));
+    if (!groupId) return;
+    const group = groups.find((g) => g.id === groupId); if (!group) return;
+    const { data: posts } = await supabase.from('tutor_group_posts').select('*').eq('group_id', group.id).order('created_at');
+    $('panel').insertAdjacentHTML('beforeend', `<div class="panel"><h3>${esc(group.title)}</h3>${(posts || []).map((p) => `<article class="list-item"><div class="grow"><span class="badge">${p.post_type === 'assignment' ? 'Assignment' : 'Message'}</span>${p.title ? `<h4 style="margin-top:8px">${esc(p.title)}</h4>` : ''}<p style="margin:8px 0">${esc(p.body)}</p>${p.attachment_url ? `<a href="${esc(p.attachment_url)}" target="_blank" rel="noopener">Open attachment</a>` : ''}<small class="muted">${fmtDate(p.created_at)}</small></div></article>`).join('')}<form id="groupPostForm"><div class="field"><label for="groupPostType">Post type</label><select class="input" id="groupPostType"><option value="message">Message</option><option value="assignment">Assignment or project (students can react; submissions go to Assignments)</option></select></div><div class="field"><label for="groupPostTitle">Assignment heading (optional for messages)</label><input class="input" id="groupPostTitle" maxlength="160"></div><div class="field"><label for="groupPostBody">Instructions or message</label><textarea class="input" id="groupPostBody" maxlength="5000"></textarea></div><label class="check"><input id="groupPostProject" type="checkbox"> This is a project that must be tutor-checked before certificate</label><div class="field"><label for="groupPostDue">Submission deadline</label><input class="input" id="groupPostDue" type="datetime-local"></div><div class="field"><label for="groupPostLink">Media or assignment link</label><input class="input" id="groupPostLink" type="url" placeholder="https://"></div><div class="field"><label for="groupPostFile">Upload media / assignment (optional)</label><input class="input" id="groupPostFile" type="file" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx"></div><button class="btn btn-lime" type="submit">Post to group</button></form></div>`);
+    $('groupPostForm').addEventListener('submit', async (event) => { event.preventDefault(); const body = $('groupPostBody').value.trim(), title = $('groupPostTitle').value.trim(), file = $('groupPostFile').files[0], postType = $('groupPostType').value, isProject = $('groupPostProject').checked, dueValue = $('groupPostDue').value; let attachment_url = $('groupPostLink').value.trim() || null; if (!body && !file) return toast('Add a message or file.', 'err'); if (postType === 'assignment' && title.length < 2) return toast('Add an assignment heading.', 'err'); if (isProject && postType !== 'assignment') return toast('Projects must be posted as assignments.', 'err'); if (attachment_url && !/^https?:\/\//i.test(attachment_url)) return toast('Attachment links must begin with https:// or http://.', 'err'); if (file) { if (file.size > 100 * 1024 * 1024) return toast('Attachment must be 100 MB or smaller.', 'err'); const path = `tutors/${me.id}/groups/${group.id}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`; const { error: uploadError } = await supabase.storage.from('media').upload(path, file, { contentType: file.type }); if (uploadError) return toast(uploadError.message, 'err'); attachment_url = supabase.storage.from('media').getPublicUrl(path).data.publicUrl; }
+      if (postType === 'assignment') { const { error } = await supabase.rpc('post_tutor_group_assignment', { p_group: group.id, p_title: title, p_instructions: body, p_attachment_url: attachment_url, p_is_project: isProject, p_due_at: dueValue ? new Date(dueValue).toISOString() : null }); if (error) return toast(error.message, 'err'); toast('Assignment posted and added to student Assignments.', 'ok'); }
+      else { const { error } = await supabase.from('tutor_group_posts').insert({ group_id: group.id, author_id: me.id, post_type: 'message', title: title || null, body: body || 'Shared an attachment', attachment_url }); if (error) return toast(error.message, 'err'); }
+      tutorGroups(group.id); });
+  }
+
+  async function studentIdDirectory() {
+    const certificateSettings = (await getSettings()).certificate || {};
+    const signatureUrl = certificateSettings.signature_url || '';
+    const { data: cards, error } = await supabase.from('student_id_cards').select('id,user_id,course_id,course:courses(title),card_number,issue_year,issued_at,status,revoked_reason').order('issued_at', { ascending: false });
+    if (error) return void ($('panel').innerHTML = empty('Student cards unavailable', error.message));
+    const ids = (cards || []).map((card) => card.user_id);
+    const { data: profiles } = ids.length ? await supabase.from('profiles').select('id,full_name,email,phone,address,avatar_url').in('id', ids) : { data: [] };
+    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    $('panel').innerHTML = `<div class="panel"><h2>Student ID cards</h2><div class="list">${(cards || []).map((card) => { const p = profileMap.get(card.user_id) || {}; const xml = (value) => String(value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[ch]); const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540"><rect width="900" height="540" rx="28" fill="#f9fbf5"/><rect width="900" height="90" rx="28" fill="#17212b"/><text x="30" y="58" fill="white" font-family="Arial" font-size="28">COURSSINS TECHNOLOGY INSTITUTE · STUDENT</text>${p.avatar_url ? `<image href="${xml(p.avatar_url)}" x="34" y="120" width="160" height="190" preserveAspectRatio="xMidYMid slice"/>` : '<rect x="34" y="120" width="160" height="190" fill="#d9e2e8"/>'}<text x="230" y="160" font-family="Arial" font-size="32" font-weight="700">${xml(p.full_name)}</text><text x="230" y="210" font-family="Arial" font-size="20">${xml(p.email)}</text><text x="230" y="250" font-family="Arial" font-size="20">${xml(p.phone)}</text><text x="230" y="290" font-family="Arial" font-size="20">${xml(p.address)}</text><path d="M34 380H866" stroke="#d7ded4"/><text x="34" y="435" font-family="Arial" font-size="24">${xml(card.card_number)} · Issued ${fmtDate(card.issued_at)} · ${xml(card.status.toUpperCase())}</text><text x="34" y="470" font-family="Arial" font-size="18">Course: ${xml(card.course?.title || "No course assigned")}</text>${signatureUrl ? `<image href="${xml(signatureUrl)}" x="680" y="455" width="150" height="42" preserveAspectRatio="xMidYMid meet"/>` : ""}<path d="M680 500H850" stroke="#17212b"/><text x="680" y="520" font-family="Arial" font-size="13">Abdulmannan Sulayman - Director of Studies</text></svg>`; const href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })); return `<div class="list-item"><div class="grow"><strong>${esc(p.full_name || 'Student')}</strong><p class="muted">${esc(p.email || '')} · ${esc(card.card_number)}</p><span class="badge ${card.status === 'valid' ? 'ok' : 'err'}">${card.status}</span>${card.revoked_reason ? `<p class="muted">${esc(card.revoked_reason)}</p>` : ''}</div><a class="btn btn-outline btn-sm" href="${href}" download="${esc(card.card_number)}.svg">Download image</a><button class="btn btn-ghost btn-sm" data-card-toggle="${card.id}" data-status="${card.status}">${card.status === 'valid' ? 'Revoke' : 'Restore'}</button></div>`; }).join('') || '<p class="muted">No student cards yet.</p>'}</div></div>`;
+    const { data: staffCards } = await supabase.from('staff_id_cards').select('id,user_id,card_number,issue_year,issued_at,status,revoked_reason').order('issued_at', { ascending: false });
+    const staffIds = (staffCards || []).map((card) => card.user_id); const { data: staffProfiles } = staffIds.length ? await supabase.from('profiles').select('id,full_name,email,phone,address,avatar_url,role').in('id', staffIds) : { data: [] };
+    const staffMap = new Map((staffProfiles || []).map((profile) => [profile.id, profile]));
+    $('panel').insertAdjacentHTML('beforeend', `<div class="panel"><h2>Staff ID cards</h2><div class="list">${(staffCards || []).map((card) => { const p = staffMap.get(card.user_id) || {}; const xml = (value) => String(value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[ch]); const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540"><rect width="900" height="540" rx="28" fill="#f9fbf5"/><rect width="900" height="90" rx="28" fill="#17212b"/><text x="30" y="58" fill="white" font-family="Arial" font-size="28">COURSSINS TECHNOLOGY INSTITUTE · STAFF</text>${p.avatar_url ? `<image href="${xml(p.avatar_url)}" x="34" y="120" width="160" height="190" preserveAspectRatio="xMidYMid slice"/>` : '<rect x="34" y="120" width="160" height="190" fill="#d9e2e8"/>'}<text x="230" y="160" font-family="Arial" font-size="32" font-weight="700">${xml(p.full_name)}</text><text x="230" y="210" font-family="Arial" font-size="20">${xml(p.role)}</text><text x="230" y="250" font-family="Arial" font-size="20">${xml(p.email)}</text><text x="230" y="290" font-family="Arial" font-size="20">${xml(p.phone)}</text><text x="230" y="330" font-family="Arial" font-size="20">${xml(p.address)}</text><path d="M34 380H866" stroke="#d7ded4"/><text x="34" y="435" font-family="Arial" font-size="24">${xml(card.card_number)} · ${xml(card.issue_year)} · ${xml(card.status.toUpperCase())}</text><text x="34" y="470" font-family="Arial" font-size="18">Role: ${xml(p.role)}</text>${signatureUrl ? `<image href="${xml(signatureUrl)}" x="680" y="455" width="150" height="42" preserveAspectRatio="xMidYMid meet"/>` : ""}<path d="M680 500H850" stroke="#17212b"/><text x="680" y="520" font-family="Arial" font-size="13">Abdulmannan Sulayman - Director of Studies</text></svg>`; const href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })); return `<div class="list-item"><div class="grow"><strong>${esc(p.full_name || 'Staff')}</strong><p class="muted">${esc(p.role || '')} · ${esc(card.card_number)}</p><span class="badge ${card.status === 'valid' ? 'ok' : 'err'}">${card.status}</span></div><a class="btn btn-outline btn-sm" href="${href}" download="${esc(card.card_number)}.svg">Download image</a><button class="btn btn-ghost btn-sm" data-staff-card-toggle="${card.id}" data-status="${card.status}">${card.status === 'valid' ? 'Revoke' : 'Restore'}</button></div>`; }).join('') || '<p class="muted">No staff cards yet.</p>'}</div></div>`);
+    $('panel').querySelectorAll('[data-card-toggle]').forEach((button) => button.addEventListener('click', async () => { const status = button.dataset.status === 'valid' ? 'revoked' : 'valid'; const revoked_reason = status === 'revoked' ? prompt('Reason for revoking this card?') || 'Revoked by administrator' : null; const { error: updateError } = await supabase.from('student_id_cards').update({ status, revoked_reason, revoked_at: status === 'revoked' ? new Date().toISOString() : null }).eq('id', button.dataset.cardToggle); if (updateError) return toast(updateError.message, 'err'); studentIdDirectory(); }));
+    $('panel').querySelectorAll('[data-staff-card-toggle]').forEach((button) => button.addEventListener('click', async () => { const status = button.dataset.status === 'valid' ? 'revoked' : 'valid'; const revoked_reason = status === 'revoked' ? prompt('Reason for revoking this card?') || 'Revoked by administrator' : null; const { error: updateError } = await supabase.from('staff_id_cards').update({ status, revoked_reason }).eq('id', button.dataset.staffCardToggle); if (updateError) return toast(updateError.message, 'err'); studentIdDirectory(); }));
   }
 
   const get = (o, p) => p.split('.').reduce((a, k) => a?.[k], o) ?? '';
@@ -377,7 +499,7 @@ if (!configured) {
   async function site() {
     const S = await getSettings();
     $('panel').innerHTML = `<p class="muted" style="margin-bottom:16px;max-width:70ch">Edit what visitors see on the homepage, footer and certificates. Changes are live as soon as you save.</p>` + SITE_SPEC.map((sec) => {
-      const cur = S[sec.key] || {};
+      const cur = S[sec.key] || (sec.key === 'certificate' ? { organisation: 'Courssins Technology Institute', signatory_name: 'Abdulmannan Sulayman', signatory: 'Director of Studies' } : {});
       let inner = '';
       if (sec.rows) inner = `<div class="table-wrap"><table class="data"><thead><tr><th>Number</th><th>Suffix</th><th>Label</th></tr></thead><tbody>${[0, 1, 2, 3].map((i) => `<tr>${sec.rows.map((k) => `<td><input class="input" style="height:44px" data-k="${i}.${k}" value="${esc(cur[i]?.[k] ?? '')}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
       else inner = sec.fields.map(([k, l, t]) => `<div class="field"><label>${l}</label>${t === 'textarea' ? `<textarea class="input" data-k="${k}">${esc(get(cur, k))}</textarea>` : t === 'image' ? `<div style="display:flex;gap:8px"><input class="input" data-k="${k}" value="${esc(get(cur, k))}" placeholder="Upload a signature image" readonly><label class="btn btn-ghost" style="flex:none;height:54px">${icon('upload', '', 18)}Upload<input type="file" hidden data-setting-image="${k}" accept="image/*"></label></div>` : `<input class="input" data-k="${k}" value="${esc(get(cur, k))}">`}</div>`).join('') + (sec.json ? `<div class="field"><label>Cards (JSON)</label><textarea class="input" data-json="${sec.json}" style="min-height:220px;font-family:monospace;font-size:.85rem">${esc(JSON.stringify(cur[sec.json] || [], null, 2))}</textarea><span class="hint">Each card: icon, title, text${sec.key === 'why' ? ', href, cta' : ''}. Set "highlight": true or "active": true on the card that should be lime.</span></div>` : '');
@@ -451,7 +573,7 @@ if (!configured) {
   }
 
   async function tutorProfile() {
-    const { data: tutor, error } = await supabase.from('tutors').select('*').eq('user_id', me.id).maybeSingle();
+    const [{ data: tutor, error }, { data: staffProfile }] = await Promise.all([supabase.from('tutors').select('*').eq('user_id', me.id).maybeSingle(), supabase.from('profiles').select('address').eq('id', me.id).maybeSingle()]);
     if (error) { $('panel').innerHTML = empty('Could not load profile', error.message); return; }
     if (!tutor) { $('panel').innerHTML = empty('Tutor profile not linked', 'Ask a Super Admin to link your login to a tutor profile.'); return; }
     const socials = tutor.socials || {};
@@ -462,6 +584,7 @@ if (!configured) {
       <div class="field"><label for="tpExperience">Experience</label><textarea class="input" id="tpExperience" maxlength="3000">${esc(tutor.experience || '')}</textarea></div>
       <div class="row-2"><div class="field"><label for="tpQualifications">Qualifications, one per line</label><textarea class="input" id="tpQualifications">${esc(arr(tutor.qualifications).join('\n'))}</textarea></div><div class="field"><label for="tpExpertise">Areas of expertise, one per line</label><textarea class="input" id="tpExpertise">${esc(arr(tutor.expertise).join('\n'))}</textarea></div></div>
       <div class="row-2"><div class="field"><label for="tpEmail">Public contact email</label><input class="input" id="tpEmail" type="email" value="${esc(tutor.email || '')}"></div><div class="field"><label for="tpImage">Profile photo</label><div style="display:flex;gap:8px"><input class="input" id="tpImage" value="${esc(tutor.image_url || '')}" readonly><label class="btn btn-ghost" style="height:54px;flex:none">${icon('upload', '', 18)}Upload<input id="tpImageUpload" type="file" accept="image/*" hidden></label></div></div></div>
+      <div class="row-2"><div class="field"><label for="tpPhone">Staff ID phone</label><input class="input" id="tpPhone" maxlength="40" value="${esc(staffProfile?.phone || '')}"></div><div class="field"><label for="tpAddress">Staff ID address</label><input class="input" id="tpAddress" maxlength="240" value="${esc(staffProfile?.address || '')}"></div></div>
       <div class="row-2"><div class="field"><label for="tpInstagram">Instagram URL</label><input class="input" id="tpInstagram" type="url" value="${esc(socials.instagram || '')}"></div><div class="field"><label for="tpLinkedin">LinkedIn URL</label><input class="input" id="tpLinkedin" type="url" value="${esc(socials.linkedin || '')}"></div></div>
       <div class="row-2"><div class="field"><label for="tpX">X URL</label><input class="input" id="tpX" type="url" value="${esc(socials.x || '')}"></div><div class="field"><label for="tpFacebook">Facebook URL</label><input class="input" id="tpFacebook" type="url" value="${esc(socials.facebook || '')}"></div></div>
       <p class="hint">A Super Admin controls whether your profile is published publicly.</p><button class="btn btn-lime" type="submit">Save profile</button></form>`;
@@ -498,14 +621,46 @@ if (!configured) {
       const { error: saveError } = await supabase.from('tutors').update(updates).eq('id', tutor.id).eq('user_id', me.id);
       setBusy(button, false);
       if (saveError) return toast('Profile could not be saved.', 'err');
+      const { error: addressError } = await supabase.from('profiles').update({ phone: $('tpPhone').value.trim(), address: $('tpAddress').value.trim() }).eq('id', me.id);
+      if (addressError) return toast('Tutor profile saved, but the ID card address could not be updated.', 'err');
       Object.keys(refCache).forEach((key) => delete refCache[key]);
       toast('Tutor profile saved', 'ok');
     });
   }
 
+  async function staffIdCard() {
+    const certificateSettings = (await getSettings()).certificate || {};
+    const signatureUrl = certificateSettings.signature_url || '';
+    const [{ data: card, error }, { data: profile }, { data: tutor }] = await Promise.all([
+      supabase.rpc('get_or_create_staff_id_card'),
+      supabase.from('profiles').select('full_name,email,phone,address,role,avatar_url').eq('id', me.id).single(),
+      supabase.from('tutors').select('image_url').eq('user_id', me.id).maybeSingle(),
+    ]);
+    if (error || !card || !profile) { $('panel').innerHTML = empty('Staff ID unavailable', error?.message || 'We could not load your staff ID.'); return; }
+    const photo = profile.avatar_url || tutor?.image_url;
+    const staffSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560"><rect width="900" height="560" rx="28" fill="#f9fbf5"/><rect width="900" height="95" rx="28" fill="#17212b"/><text x="30" y="60" fill="white" font-family="Arial" font-size="29">COURSSINS TECHNOLOGY INSTITUTE · STAFF</text>${photo ? `<image href="${esc(photo)}" x="34" y="120" width="170" height="200" preserveAspectRatio="xMidYMid slice"/>` : '<rect x="34" y="120" width="170" height="200" fill="#d9e2e8"/>'}<text x="240" y="155" font-family="Arial" font-size="32" font-weight="700">${esc(profile.full_name)}</text><text x="240" y="205" font-family="Arial" font-size="20">${esc(profile.role.replace('_', ' '))}</text><text x="240" y="250" font-family="Arial" font-size="20">${esc(profile.email)}</text><text x="240" y="290" font-family="Arial" font-size="20">${esc(profile.phone)}</text><text x="240" y="330" font-family="Arial" font-size="20">${esc(profile.address)}</text><path d="M34 390H866" stroke="#d7ded4"/><text x="34" y="445" font-family="Arial" font-size="24">${esc(card.card_number)} · ${esc(String(card.issue_year))} · ${esc(card.status.toUpperCase())}</text>${signatureUrl ? `<image href="${esc(signatureUrl)}" x="680" y="455" width="150" height="42" preserveAspectRatio="xMidYMid meet"/>` : ''}<path d="M680 500H850" stroke="#17212b"/><text x="680" y="520" font-family="Arial" font-size="13">Abdulmannan Sulayman, Director of Studies</text></svg>`;
+    const staffSvgUrl = URL.createObjectURL(new Blob([staffSvg], { type: 'image/svg+xml;charset=utf-8' }));
+    $('panel').innerHTML = `<div class="panel" style="max-width:760px"><div style="display:flex;justify-content:space-between;align-items:center;gap:16px"><div><span class="eyebrow">Courssins Technology Institute</span><h2 style="margin-top:8px">Staff identity card</h2></div><span class="badge ${card.status === 'valid' ? 'ok' : 'err'}">${card.status}</span></div><article class="panel" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;background:var(--paper);margin-top:20px"><div style="width:128px;height:156px;border-radius:var(--r-md);overflow:hidden;background:var(--soft);display:grid;place-items:center;flex:none">${photo ? `<img src="${esc(photo)}" alt="Staff photo" style="width:100%;height:100%;object-fit:cover">` : icon('user', '', 42)}</div><div class="grow"><p class="muted" style="font-size:.82rem;letter-spacing:.1em;text-transform:uppercase">${esc(profile.role.replace('_', ' '))}</p><h2 style="margin:4px 0 14px">${esc(profile.full_name || 'Staff member')}</h2><ul class="facts" style="margin:0"><li>${icon('mail')}<span>${esc(profile.email || 'No email')}</span></li><li>${icon('phone')}<span>${esc(profile.phone || 'No phone')}</span></li><li>${icon('pin')}<span>${esc(profile.address || 'No address')}</span></li></ul></div><div style="width:100%;border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span><strong>${esc(card.card_number)}</strong><br><small>Staff ID</small></span><span style="text-align:right"><strong>${esc(String(card.issue_year))}</strong><br><small>Year issued</small></span></div></article>${card.status === 'revoked' ? `<div class="alert err" style="margin-top:16px">This staff ID card has been revoked${card.revoked_reason ? `: ${esc(card.revoked_reason)}` : '.'} Contact an administrator for help.</div>` : ''}<form class="panel" id="staffCardProfile" style="margin-top:16px"><h3>Card contact details</h3><div class="row-2"><div class="field"><label for="staffCardPhone">Phone</label><input class="input" id="staffCardPhone" maxlength="40" value="${esc(profile.phone || '')}"></div><div class="field"><label for="staffCardPhoto">Passport or profile image</label><div style="display:flex;gap:8px"><input class="input" id="staffCardPhoto" readonly value="${esc(profile.avatar_url || '')}"><label class="btn btn-ghost" style="height:54px;flex:none">${icon('upload', '', 16)}Upload<input id="staffCardPhotoUpload" type="file" accept="image/*" hidden></label></div></div></div><div class="field"><label for="staffCardAddress">Address</label><input class="input" id="staffCardAddress" maxlength="240" value="${esc(profile.address || '')}"></div><button class="btn btn-dark" type="submit">Save ID card details</button></form><button class="btn btn-outline" style="margin-top:16px" type="button" onclick="window.print()">Print ID card</button> <a class="btn btn-lime" href="${staffSvgUrl}" download="${esc(card.card_number)}.svg">Download ID image</a></div>`;
+    $('staffCardPhotoUpload').addEventListener('change', async (event) => {
+      const file = event.currentTarget.files[0]; if (!file) return;
+      if (file.size > 10 * 1024 * 1024) return toast('Profile image must be 10 MB or smaller.', 'err');
+      const folder = me.role === T ? `tutors/${me.id}` : `staff/${me.id}`;
+      const path = `${folder}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('media').upload(path, file, { upsert: false, contentType: file.type });
+      if (uploadError) return toast(`Profile image upload failed: ${uploadError.message}`, 'err');
+      $('staffCardPhoto').value = supabase.storage.from('media').getPublicUrl(path).data.publicUrl;
+    });
+    $('staffCardProfile').addEventListener('submit', async (event) => {
+      event.preventDefault(); const button = event.currentTarget.querySelector('button[type="submit"]'); setBusy(button, true, 'Saving');
+      const { error: saveError } = await supabase.from('profiles').update({ phone: $('staffCardPhone').value.trim(), address: $('staffCardAddress').value.trim(), avatar_url: $('staffCardPhoto').value.trim() || null }).eq('id', me.id);
+      setBusy(button, false); if (saveError) return toast('ID card details could not be saved.', 'err');
+      toast('ID card details saved', 'ok'); staffIdCard();
+    });
+  }
+
   async function courseBuilder(courseId) {
     $('panel').innerHTML = '<div class="card skeleton" style="min-height:260px"></div>';
-    const { data: courses, error } = await supabase.from('courses').select('id,title').order('sort_order');
+    const { data: courses, error } = await supabase.from('courses').select('id,title,lessons_start_at').order('sort_order');
     if (error) { $('panel').innerHTML = empty('Could not load courses', error.message); return; }
     if (!courses?.length) { $('panel').innerHTML = empty('No courses assigned', 'Create a course or ask an admin to assign one to you.'); return; }
     const selectedCourse = courseId || builderCourseId || courses[0].id;
@@ -523,13 +678,24 @@ if (!configured) {
       <div class="panel"><div class="section-head"><div><h2>${esc(courses.find((course) => course.id === selectedCourse)?.title || '')}</h2><p class="muted">${moduleRows.length} modules · ${lessonRows.length} sections · ${resourceRows.length} resources</p></div><button class="btn btn-dark btn-sm" id="addResource">${icon('upload', '', 16)}Upload resource</button></div>
       ${moduleRows.map((module) => {
         const moduleLessons = lessonRows.filter((lesson) => lesson.module_id === module.id);
-        return `<section class="panel"><div class="tools"><div class="grow"><h3>Module ${module.position}: ${esc(module.title)}</h3><p class="muted">${esc(module.summary || '')}</p></div><button class="btn btn-ghost btn-sm" data-edit-module="${module.id}">Edit</button><button class="btn btn-lime btn-sm" data-add-lesson="${module.id}">${icon('plus', '', 16)}Add section</button></div>
+        return `<section class="panel"><div class="tools"><div class="grow"><h3>Module ${module.position}: ${esc(module.title)}</h3><p class="muted">${esc(module.summary || '')}</p></div><button class="btn btn-ghost btn-sm" data-edit-module="${module.id}">Edit</button><button class="btn btn-outline btn-sm" data-auto-quiz="${module.id}">Generate quiz draft</button><button class="btn btn-lime btn-sm" data-add-lesson="${module.id}">${icon('plus', '', 16)}Add section</button></div>
           ${moduleLessons.length ? `<div class="list">${moduleLessons.map((lesson) => `<div class="list-item"><div class="grow"><strong>${esc(lesson.title)}</strong><p class="muted">${esc(lesson.duration_min ? `${lesson.duration_min} min` : lesson.video_url ? 'Video attached' : 'Lesson notes')}</p></div><button class="btn btn-ghost btn-sm" data-edit-lesson="${lesson.id}">Edit section</button></div>`).join('')}</div>` : '<p class="muted">No sections yet. Add your first lesson section.</p>'}</section>`;
       }).join('') || empty('No modules yet', 'Add a module to begin building this course.')}
       <section class="panel"><div class="tools"><div class="grow"><h3>Learning resources</h3><p class="muted">Private files are available only to enrolled students and assigned tutors.</p></div><button class="btn btn-dark btn-sm" data-v="resources">Manage resources</button></div>${resourceRows.slice(0, 5).map((resource) => `<p class="hint">${esc(resource.title)} · ${esc(resource.resource_type)} · ${resource.published ? 'Published' : 'Draft'}</p>`).join('')}</section>
-      <div class="btn-row"><button class="btn btn-outline btn-sm" data-v="assignments">Manage assignments</button><button class="btn btn-outline btn-sm" data-v="exams">Manage module and final assessments</button><button class="btn btn-outline btn-sm" data-v="questions">Manage questions</button><button class="btn btn-outline btn-sm" data-v="students">View students</button></div></div>`;
+      <div class="btn-row"><button class="btn btn-outline btn-sm" data-v="assignments">Manage assignments</button><button class="btn btn-outline btn-sm" data-v="students">View students</button></div></div>`;
 
+    $('builderCourse').insertAdjacentHTML('afterend', `<label class="label" for="builderStartDate">Lessons start</label><input class="input" id="builderStartDate" type="datetime-local" value="${toLocal(courses.find((course) => course.id === selectedCourse)?.lessons_start_at || '')}" style="max-width:250px"><button class="btn btn-dark btn-sm" id="saveStartDate">Save schedule</button>`);
     $('builderCourse').addEventListener('change', (event) => courseBuilder(event.currentTarget.value));
+    $('saveStartDate').addEventListener('click', async (event) => {
+      const raw = $('builderStartDate').value;
+      const lessons_start_at = raw ? new Date(raw).toISOString() : null;
+      setBusy(event.currentTarget, true, 'Saving');
+      const { error: scheduleError } = await supabase.from('courses').update({ lessons_start_at }).eq('id', selectedCourse);
+      setBusy(event.currentTarget, false);
+      if (scheduleError) return toast(scheduleError.message, 'err');
+      toast('Course schedule saved. Enrolled students have been notified.', 'ok');
+      courseBuilder(selectedCourse);
+    });
     $('addModule').addEventListener('click', () => {
       const formModal = modal({ title: 'Add module', body: '<form id="builderModuleForm"><div class="field"><label for="bmTitle">Module title</label><input class="input" id="bmTitle" required maxlength="160"></div><div class="field"><label for="bmSummary">Module description</label><textarea class="input" id="bmSummary" maxlength="1000"></textarea></div><div class="field"><label for="bmTopics">Section titles, one per line</label><textarea class="input" id="bmTopics" placeholder="Introduction\nGetting started\nBasic concepts"></textarea><span class="hint">Each line becomes a lesson section that you can edit later.</span></div></form>', actions: '<button class="btn btn-lime" id="saveModule">Create module and sections</button>' });
       formModal.el.querySelector('#saveModule').addEventListener('click', async (event) => {
@@ -550,17 +716,36 @@ if (!configured) {
     });
     $('panel').querySelectorAll('[data-edit-module]').forEach((button) => button.addEventListener('click', () => form('modules', moduleRows.find((module) => module.id === button.dataset.editModule))));
     $('panel').querySelectorAll('[data-edit-lesson]').forEach((button) => button.addEventListener('click', () => form('lessons', lessonRows.find((lesson) => lesson.id === button.dataset.editLesson))));
+    $('panel').querySelectorAll('[data-auto-quiz]').forEach((button) => button.addEventListener('click', async () => {
+      const module = moduleRows.find((item) => item.id === button.dataset.autoQuiz); const sourceLessons = lessonRows.filter((lesson) => lesson.module_id === module.id);
+      if (!sourceLessons.length) return toast('Add lesson sections before generating a quiz.', 'err');
+      const statements = sourceLessons.flatMap((lesson) => String(lesson.content || '').split(/[.!?\n]+/).map((part) => part.trim()).filter((part) => part.length >= 12).map((part) => `${lesson.title}: ${part}`));
+      const pool = [...new Set([...statements, ...sourceLessons.map((lesson) => `The section ${lesson.title} is included in this module.`)])];
+      while (pool.length < 7) pool.push(`Review the key learning points in ${module.title} and its lesson sections.`);
+      if (pool.length < 7) return toast('Add more lesson notes so the draft has enough source material.', 'err');
+      const m = modal({ title: 'Generate quiz draft', body: `<p>This creates seven draft questions from this module’s lesson notes and section titles. Review and edit every question and answer before publishing.</p><div class="alert info">Generated quizzes start unpublished and use a 50% pass mark with a 13-minute timer.</div>`, actions: '<button class="btn btn-lime" id="makeAutoQuiz">Generate draft</button>' });
+      m.el.querySelector('#makeAutoQuiz').addEventListener('click', async (event) => { setBusy(event.currentTarget, true, 'Generating'); const { data: exam, error: examError } = await supabase.from('exams').insert({ course_id: selectedCourse, module_id: module.id, is_final: false, title: `Module ${module.position}: ${module.title} Quiz`, instructions: 'Auto-generated draft. Tutor must review and edit the questions and answers before publishing.', duration_min: 13, pass_mark: 50, published: false }).select('id').single(); if (examError) { setBusy(event.currentTarget, false); return toast(examError.message, 'err'); }
+        const rows = Array.from({ length: 7 }, (_, index) => { const answer = pool[index % pool.length]; const distractors = pool.filter((item) => item !== answer).slice(index % Math.max(pool.length - 3, 1), index % Math.max(pool.length - 3, 1) + 3); while (distractors.length < 3) distractors.push(`Review another section in ${module.title}.`); return { exam_id: exam.id, question: `Which learning point is covered in this module? (Draft ${index + 1})`, options: [answer, ...distractors.slice(0, 3)], correct_index: 0, position: index + 1 }; });
+        const { error: questionError } = await supabase.from('exam_questions').insert(rows); if (questionError) { await supabase.from('exams').delete().eq('id', exam.id); setBusy(event.currentTarget, false); return toast(questionError.message, 'err'); } m.close(); toast('Unpublished 7-question draft created; review it in Quizzes and Questions.', 'ok');
+      });
+    }));
     $('panel').querySelectorAll('[data-add-lesson]').forEach((button) => button.addEventListener('click', () => {
       const module = moduleRows.find((item) => item.id === button.dataset.addLesson);
-      const formModal = modal({ title: `Add section to ${module.title}`, body: '<form id="builderLessonForm"><div class="field"><label for="blTitle">Section title</label><input class="input" id="blTitle" required maxlength="160"></div><div class="field"><label for="blNotes">Lesson notes</label><textarea class="input" id="blNotes" maxlength="12000"></textarea></div><div class="field"><label for="blVideo">Video URL (optional)</label><input class="input" id="blVideo" type="url" placeholder="https://"></div><div class="field"><label for="blDuration">Duration in minutes</label><input class="input" id="blDuration" type="number" min="0"></div><label class="check"><input type="checkbox" id="blPreview"> Free preview</label></form>', actions: '<button class="btn btn-lime" id="saveLesson">Add section</button>' });
+      const formModal = modal({ title: `Add section to ${module.title}`, body: '<form id="builderLessonForm"><div class="field"><label for="blTitle">Section title</label><input class="input" id="blTitle" required maxlength="160"></div><div class="field"><label for="blNotes">Lesson notes</label><textarea class="input" id="blNotes" maxlength="12000"></textarea></div><div class="field"><label for="blVideo">Video URL (optional)</label><input class="input" id="blVideo" type="url" placeholder="https://"></div><div class="field"><label for="blVideoFile">Or upload video from this device (up to 500 MB)</label><input class="input" id="blVideoFile" type="file" accept="video/*"></div><div class="field"><label for="blDuration">Duration in minutes</label><input class="input" id="blDuration" type="number" min="0"></div><label class="check"><input type="checkbox" id="blPreview"> Free preview</label></form>', actions: '<button class="btn btn-lime" id="saveLesson">Add section</button>' });
       formModal.el.querySelector('#saveLesson').addEventListener('click', async (event) => {
         const title = formModal.el.querySelector('#blTitle').value.trim();
         const video = formModal.el.querySelector('#blVideo').value.trim();
+        const videoFile = formModal.el.querySelector('#blVideoFile').files[0];
         if (!title) return toast('Enter a section title.', 'err');
         if (video && !/^https?:\/\//i.test(video)) return toast('Video URLs must start with https:// or http://.', 'err');
+        if (video && videoFile) return toast('Choose either a video URL or upload a video file.', 'err');
+        if (videoFile && (!videoFile.type.startsWith('video/') || videoFile.size > 500 * 1024 * 1024)) return toast('Choose a video file up to 500 MB.', 'err');
         setBusy(event.currentTarget, true, 'Saving');
         const position = lessonRows.filter((lesson) => lesson.module_id === module.id).reduce((max, lesson) => Math.max(max, Number(lesson.position) || 0), module.position * 10 - 1) + 1;
-        const { error: lessonError } = await supabase.from('lessons').insert({ course_id: selectedCourse, module_id: module.id, title, content: formModal.el.querySelector('#blNotes').value.trim(), video_url: video || null, duration_min: Number(formModal.el.querySelector('#blDuration').value) || null, is_preview: formModal.el.querySelector('#blPreview').checked, position });
+        let videoPath = null;
+        if (videoFile) { videoPath = `${selectedCourse}/${Date.now()}-${videoFile.name.replace(/[^a-z0-9._-]/gi, '_')}`; const { error: uploadError } = await supabase.storage.from('course-materials').upload(videoPath, videoFile, { upsert: false, contentType: videoFile.type }); if (uploadError) { setBusy(event.currentTarget, false); return toast(uploadError.message, 'err'); } }
+        const { error: lessonError } = await supabase.from('lessons').insert({ course_id: selectedCourse, module_id: module.id, title, content: formModal.el.querySelector('#blNotes').value.trim(), video_url: video || null, video_path: videoPath, duration_min: Number(formModal.el.querySelector('#blDuration').value) || null, is_preview: formModal.el.querySelector('#blPreview').checked, position });
+        if (lessonError && videoPath) await supabase.storage.from('course-materials').remove([videoPath]);
         if (lessonError) { setBusy(event.currentTarget, false); return toast(lessonError.message, 'err'); }
         formModal.close(); toast('Section added', 'ok'); courseBuilder(selectedCourse);
       });
@@ -592,11 +777,11 @@ if (!configured) {
   }
 
   async function go(v) {
-    v = v || 'dash'; const profileView = v === 'tutor-profile' && me.role === T; const builderView = v === 'builder' && myRank >= 1; if (v !== 'dash' && v !== 'site' && !profileView && !builderView && !allowed.find(([k]) => k === v)) v = 'dash'; if (v === 'site' && myRank < 3) v = 'dash';
+    v = v || 'dash'; const profileView = v === 'tutor-profile' && me.role === T; const cardView = v === 'staff-id'; const builderView = v === 'builder' && myRank >= 1; const inboxView = v === 'staff-inbox'; const groupsView = v === 'tutor-groups' && me.role === T; const studentCardsView = v === 'student-id-directory' && myRank >= 2; if (v !== 'dash' && v !== 'site' && !profileView && !cardView && !builderView && !inboxView && !groupsView && !studentCardsView && !allowed.find(([k]) => k === v)) v = 'dash'; if (v === 'site' && myRank < 3) v = 'dash';
     document.querySelectorAll('[data-v]').forEach((b) => b.classList?.contains('side-link') && b.setAttribute('aria-current', b.dataset.v === v));
-    $('panelTitle').textContent = v === 'dash' ? 'Overview' : v === 'site' ? 'Website content' : profileView ? 'My tutor profile' : builderView ? 'Course builder' : E[v].t; toggle(false);
+    $('panelTitle').textContent = v === 'dash' ? 'Overview' : v === 'site' ? 'Website content' : profileView ? 'My tutor profile' : cardView ? 'My staff ID' : builderView ? 'Course builder' : inboxView ? 'Staff inbox' : groupsView ? 'Course discussions' : studentCardsView ? 'Student ID cards' : E[v].t; toggle(false);
     history.replaceState(null, '', `#${v}`);
-    try { await (v === 'dash' ? dash() : v === 'site' ? site() : profileView ? tutorProfile() : builderView ? courseBuilder() : list(v)); } catch (er) { console.error(er); $('panel').innerHTML = empty('Something went wrong', 'Refresh the page and try again.'); }
+    try { await (v === 'dash' ? dash() : v === 'site' ? site() : profileView ? tutorProfile() : cardView ? staffIdCard() : builderView ? courseBuilder() : inboxView ? staffInbox() : groupsView ? tutorGroups(null) : studentCardsView ? studentIdDirectory() : list(v)); } catch (er) { console.error(er); $('panel').innerHTML = empty('Something went wrong', 'Refresh the page and try again.'); }
   }
   document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-v]'); if (b) go(b.dataset.v); });
   addEventListener('hashchange', () => go(location.hash.slice(1)));

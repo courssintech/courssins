@@ -7,7 +7,7 @@ courssins/
   vercel.json                  Vercel config (serves /public, security + cache headers)
   public/                      the website (this is what Vercel serves)
     index.html about.html courses.html course.html tutors.html tutor.html library.html
-    blog.html article.html login.html signup.html dashboard.html admin.html
+    blog.html article.html login.html signup.html dashboard.html admin.html learn.html
     pages.html page.html contact.html certificate-verify.html 404.html robots.txt sitemap.xml
     components/header.html footer.html
     assets/css/style.css responsive.css
@@ -18,7 +18,7 @@ courssins/
   supabase/
     schema.sql                 tables, RLS policies, RPC functions, storage bucket
     seed.sql                   sample courses, tutors, articles, library, settings, terms/privacy
-    migrations/                 additive upgrades for tutor assignments, private resources, assessments, discussions and ads
+    migrations/                 additive upgrades for tutor assignments, private resources, lesson pages, quizzes, discussions, ads and staff ID cards
     functions/admin-users, resend-notifications       account management and email alerts
     functions/paystack-initialize, paystack-webhook   payment gateway (Edge Functions)
   scripts/  generate-seed.mjs  build-pages.py  make-images.py   (optional regeneration helpers)
@@ -67,12 +67,12 @@ Set the Paystack webhook URL to `https://<project>.supabase.co/functions/v1/pays
 ## Roles and security model
 | Role | Can do (enforced by database policies, not by the browser) |
 |---|---|
-| student | read own profile, enrolments, payments, results, certificates; complete lessons, submit assignment text/files, join lesson discussions, and take timed assessments |
-| tutor | use Course Builder for assigned courses; manage modules, lessons, private resources, assignments and assessments; grade submissions; view enrolled students and discussions **for courses assigned to them**; edit their own tutor profile |
+| student | read own profile, enrolments, payments, results, certificates; complete course sections, submit assignment text/files, join lesson discussions, and take timed quizzes |
+| tutor | use Course Builder for assigned courses; manage modules, lessons, private resources, assignments and quizzes; grade submissions; view enrolled students and discussions **for courses assigned to them**; edit their own tutor profile and view their staff ID |
 | admin | everything above plus students, courses, tutors, payments, certificates, events, advertisements, library, blog, newsletter, messages and discussions |
 | super_admin | also invite/manage staff accounts, custom pages, website settings, roles and certificate signature |
 
-Key protections: public signups always create `student` accounts; tutor/admin accounts are invited by the Super Admin through the server-side Edge Function; role and active-status changes are Super Admin-only. Disabled accounts lose authentication access and tutor course ownership. Private course resources and assignment submissions use the private storage bucket with enrollment/ownership policies and signed downloads. Module lessons remain locked until prior module assessments are passed. Module assessments require 7 questions; the final assessment requires 15, and server-side timers prevent client-only score submission. `begin_exam` returns questions without answer keys and `submit_exam_attempt` scores an unexpired attempt. Certificates require completed lessons, tutor-graded assignments, passed assessments, and a passed final assessment. Public certificate verification returns only name, course and dates for an exact certificate number.
+Key protections: public signups always create `student` accounts; tutor/admin accounts are invited by the Super Admin through the server-side Edge Function; role and active-status changes are Super Admin-only. Disabled accounts lose authentication access and tutor course ownership. Private course videos, resources and assignment submissions use the private storage bucket with enrollment/ownership policies and signed downloads. Students continue to access active course materials after a certificate is issued. Module quizzes require 7 questions; the final quiz requires 15, and server-side 13-minute timers prevent client-only score submission. `begin_exam` returns questions without answer keys and `submit_exam_attempt` scores an unexpired attempt. Certificates require completed sections, tutor-graded assignments, passed module quizzes, and a passed final quiz. Admins can revoke certificates and staff ID cards.
 
 Custom pages: admin-written HTML is sanitised (scripts, iframes, forms and event handlers removed) and shown inside a Shadow DOM so page CSS cannot restyle the site. No server-side code is executed.
 
@@ -82,8 +82,8 @@ Custom pages: admin-written HTML is sanitised (scripts, iframes, forms and event
 - Terms and Privacy pages are editable policy drafts; have them reviewed by a qualified adviser before relying on them.
 - Upload the institute signature in Admin > Website content > Certificate signature. Certificates use that uploaded image when printed.
 - Dynamic pages (course, tutor, article, custom page) set their title, description and structured data with JavaScript. Google renders this, but some social-preview crawlers do not read it; those show the generic page tags.
-- Lessons are created with placeholder notes from the seed; add real notes and videos in Admin > Lessons.
-- Add at least one published final assessment (15 questions), any module assessments (7 questions each), lessons, and assignments; students cannot receive a certificate until those requirements are completed and passed/graded.
+- Lessons are created with placeholder notes from the seed; add real notes and a video URL or upload a video in Admin > Lessons. Uploaded lesson videos are private and stream through signed links for enrolled students.
+- Add at least one published final quiz (15 questions), any module quizzes (7 questions each), lessons, and assignments; students cannot receive a certificate until those requirements are completed and passed/graded.
 
 ## Running locally
 Copy `.env.example` to `.env`, fill in your values, then run `node scripts/link-env.mjs` before serving the site. Any static server works: `cd public && python3 -m http.server 8000`. Without keys in the env file or Vercel environment variables the site runs on sample content and shows clear "connect Supabase" messages where accounts are needed.

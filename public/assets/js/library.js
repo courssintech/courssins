@@ -15,8 +15,8 @@ function render() {
   grid.innerHTML = list.map((i) => {
     const locked = i.access === 'members' && !loggedIn;
     return `<article class="card" data-reveal><div class="card-body" style="padding:22px 14px 14px"><span class="f-icon" style="width:52px;height:52px;border-radius:16px;background:var(--lime);display:grid;place-items:center">${icon(ICON[i.type] || 'file', '', 24)}</span>
-      <span class="chip" style="text-transform:capitalize">${esc(i.type)}${i.access === 'members' ? ' · members' : ''}</span><h3 class="card-title">${esc(i.title)}</h3><p class="card-text">${esc(i.description)}</p>
-      <div class="card-foot">${locked ? '<a class="btn btn-dark btn-sm" href="login.html?next=library.html">Log in to open</a>' : `<a class="btn btn-dark btn-sm" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">Open resource ${icon('external', '', 16)}</a>`}</div></div></article>`;
+      <span class="chip" style="text-transform:capitalize">${esc(i.type)} · ${i.pricing === 'paid' ? esc(`${i.currency || 'NGN'} ${i.price}`) : 'Free'}${i.access === 'members' ? ' · members' : ''}</span><h3 class="card-title">${esc(i.title)}</h3><p class="card-text">${esc(i.description)}</p>
+      <div class="card-foot">${locked ? '<a class="btn btn-dark btn-sm" href="login.html?next=library.html">Log in to open</a>' : `<a class="btn btn-dark btn-sm" href="library-item.html?id=${encodeURIComponent(i.id)}">View / preview ${icon('external', '', 16)}</a>`}</div></div></article>`;
   }).join('') || empty('No resources found', 'Try another type or search term.');
   refresh(grid);
 }

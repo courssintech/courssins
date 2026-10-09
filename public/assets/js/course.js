@@ -13,6 +13,17 @@ else {
   setMeta({ title: `${c.title} Course in Nigeria`, description: c.short_description, image: `${CONFIG.SITE_URL}/${c.image_url}`, url, jsonld: { '@context': 'https://schema.org', '@type': 'Course', name: c.title, description: c.short_description, provider: { '@type': 'Organization', name: 'Courssins Technology Institute', sameAs: CONFIG.SITE_URL }, offers: { '@type': 'Offer', price: c.price, priceCurrency: c.currency, category: 'Paid' } } });
   const tutors = c.tutors?.length ? c.tutors : c.tutor ? [c.tutor] : [];
   const mods = arr(c.modules);
+  let enrolled = false;
+  let sections = [];
+  if (configured) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session) {
+      const { data: enrollment } = await supabase.from('enrollments').select('status').eq('course_id', c.id).eq('user_id', sessionData.session.user.id).maybeSingle();
+      enrolled = enrollment?.status === 'active';
+    }
+    const { data: lessonRows } = await supabase.from('lessons').select('id,title,module_id,position,duration_min,is_preview').eq('course_id', c.id).order('position');
+    sections = lessonRows || [];
+  }
   const avg = reviews.length ? (reviews.reduce((n, r) => n + r.rating, 0) / reviews.length).toFixed(1) : null;
   const stars = (n) => `<span class="stars" aria-label="${n} out of 5">${Array.from({ length: 5 }, (_, i) => icon('star', '', 16).replace('fill="none"', i < n ? 'fill="currentColor"' : 'fill="none"')).join('')}</span>`;
   root.innerHTML = `
@@ -24,9 +35,9 @@ else {
     <section class="block"><h2>About this course</h2><p class="lead" style="max-width:none">${esc(c.description)}</p></section>
     <section class="block"><h2>What you will learn</h2><ul class="ticks">${arr(c.outcomes).map((o) => `<li><span class="tick">${icon('check', '', 14)}</span><span>${esc(o)}</span></li>`).join('')}</ul></section>
     <section class="block"><h2>Course modules</h2><div class="grid grid-2">${mods.map((m) => `<div class="feature"><div class="f-icon" style="font-weight:800">${m.position}</div><h3>${esc(m.title)}</h3><p>${esc(m.summary)}</p></div>`).join('')}</div></section>
-    <section class="block"><h2>Curriculum</h2>${mods.map((m, i) => `<details class="acc" ${i === 0 ? 'open' : ''}><summary>Module ${m.position}: ${esc(m.title)}</summary><div class="acc-body"><ul>${arr(m.topics).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div></details>`).join('')}</section>
+    <section class="block"><h2>Curriculum</h2>${mods.map((m, i) => { const rows = sections.filter((section) => section.module_id === m.id); return `<details class="acc" ${i === 0 ? 'open' : ''}><summary>Module ${m.position}: ${esc(m.title)} <span class="muted">${rows.length} section${rows.length === 1 ? '' : 's'}</span></summary><div class="acc-body">${rows.length ? rows.map((section) => enrolled ? `<a class="list-item" href="learn.html?lesson=${section.id}" style="display:flex;gap:10px;align-items:center;color:inherit;text-decoration:none"><span>${icon('play', '', 16)}</span><span class="grow">${esc(section.title)}</span>${section.duration_min ? `<span class="muted">${section.duration_min} min</span>` : ''}</a>` : `<div class="list-item" style="display:flex;gap:10px;align-items:center"><span>${icon(section.is_preview ? 'play' : 'lock', '', 16)}</span><span class="grow">${esc(section.title)}</span>${section.is_preview ? '<span class="badge ok">Preview</span>' : '<span class="muted">Enrol to unlock</span>'}</div>`).join('') : `<ul>${arr(m.topics).map((x) => `<li>${esc(x)}</li>`).join('') || '<li>Section details will be available soon.</li>'}</ul>`}</div></details>`; }).join('')}</section>
     <section class="block"><h2>Requirements</h2><ul class="ticks">${arr(c.requirements).map((o) => `<li><span class="tick">${icon('check', '', 14)}</span><span>${esc(o)}</span></li>`).join('')}</ul></section>
-    <section class="block grid grid-2"><div class="feature"><div class="f-icon">${icon('file', '', 24)}</div><h3>Assignments and assessment</h3><p>${esc(c.assessment_info)}</p></div><div class="feature is-highlight"><div class="f-icon">${icon('award', '', 24)}</div><h3>Certificate</h3><p>${esc(c.certificate_info)}</p></div></section>
+    <section class="block grid grid-2"><div class="feature"><div class="f-icon">${icon('file', '', 24)}</div><h3>Assignments and quizzes</h3><p>${esc(c.assessment_info)}</p></div><div class="feature is-highlight"><div class="f-icon">${icon('award', '', 24)}</div><h3>Certificate</h3><p>${esc(c.certificate_info)}</p></div></section>
     <section class="block"><h2>Frequently asked questions</h2>${arr(c.faqs).map((f) => `<details class="acc"><summary>${esc(f.q)}</summary><div class="acc-body">${esc(f.a)}</div></details>`).join('')}</section>
     <section class="block" id="reviews"><h2>Student reviews ${avg ? `<span class="muted" style="font-size:1rem;font-weight:600">${avg} average from ${reviews.length}</span>` : ''}</h2>
       ${reviews.length ? reviews.map((r) => `<div class="review">${stars(r.rating)}<p style="margin-top:8px">${esc(r.comment)}</p><p class="muted" style="margin-top:8px;font-size:.9rem">${esc(r.name)} · ${fmtDate(r.created_at)}</p></div>`).join('') : '<div class="empty" style="padding:32px"><p>Reviews from graduates will appear here after the first cohort completes.</p></div>'}
