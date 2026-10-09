@@ -30,6 +30,14 @@ def head(title, desc, path, noindex=False, extra=''):
 <link rel="stylesheet" href="{FONTS}" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript>
 <link rel="stylesheet" href="assets/css/style.css">
 <link rel="stylesheet" href="assets/css/responsive.css">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-1D5EQE0SWB"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  gtag('js', new Date());
+  gtag('config', 'G-1D5EQE0SWB');
+</script>
 <script>document.documentElement.classList.add('js')</script>
 {extra}
 </head>

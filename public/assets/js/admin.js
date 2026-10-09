@@ -53,7 +53,7 @@ const E = {
     fields: [{ k: 'assignment_id', l: 'Assignment', type: 'ref', ref: ['assignments', 'title'], ro: 1 }, { k: 'user_id', l: 'Student', type: 'ref', ref: ['profiles', 'full_name'], ro: 1 }, { k: 'file_path', l: 'Uploaded file', type: 'privateAsset', ro: 1 }, { k: 'content', l: 'Answer', type: 'textarea', ro: 1 }, { k: 'link_url', l: 'Link', ro: 1 }, { k: 'score', l: 'Score', type: 'number' }, { k: 'feedback', l: 'Feedback', type: 'textarea' }] },
   exams: { g: 'Learning', min: T, t: 'Quizzes', table: 'exams', ic: 'quiz',
     cols: [['title', 'Title'], ['course_id', 'Course'], ['pass_mark', 'Pass mark'], ['published', 'Published', boolCol]],
-    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module (leave blank for final)', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'is_final', l: 'Final course quiz', type: 'check', help: 'Final quizzes require 15 questions. Module quizzes require 7.' }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'duration_min', l: 'Quiz timer', type: 'number', def: 13, ro: 1, help: 'All quizzes are timed for 13 minutes.' }, { k: 'pass_mark', l: 'Pass mark (%)', type: 'number', def: 50 }, { k: 'published', l: 'Published', type: 'check', def: true }] },
+    fields: [{ k: 'course_id', l: 'Course', type: 'ref', ref: ['courses', 'title'], req: 1 }, { k: 'module_id', l: 'Module (leave blank for final)', type: 'ref', ref: ['course_modules', 'title'], opt: 1 }, { k: 'is_final', l: 'Final course quiz', type: 'check', help: 'Final quizzes require 15 questions. Module quizzes require 7.' }, { k: 'title', l: 'Title', req: 1 }, { k: 'instructions', l: 'Instructions', type: 'textarea' }, { k: 'duration_min', l: 'Quiz timer (minutes)', type: 'number', def: 13, req: 1, help: 'Choose the time students have to complete this quiz.' }, { k: 'pass_mark', l: 'Pass mark (%)', type: 'number', def: 50 }, { k: 'published', l: 'Published', type: 'check', def: false }] },
   questions: { g: 'Learning', min: T, t: 'Quiz questions', table: 'exam_questions', ic: 'list', order: ['position', true],
     cols: [['exam_id', 'Quiz'], ['position', '#'], ['question', 'Question']],
     fields: [{ k: 'exam_id', l: 'Quiz', type: 'ref', ref: ['exams', 'title'], req: 1 }, { k: 'question', l: 'Question', type: 'textarea', req: 1 }, { k: 'options', l: 'Answer options (one per line)', type: 'lines', req: 1 }, { k: 'correct_index', l: 'Correct option number', type: 'number', def: 0, req: 1, help: 'Count from 1: 1 = the first option listed.', off: 1 }, { k: 'position', l: 'Position', type: 'number', def: 1 }] },
@@ -121,7 +121,7 @@ if (!configured) {
   const updateLiveClock = () => { liveStatus.querySelector('time').textContent = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()); };
   updateLiveClock(); setInterval(updateLiveClock, 30000);
   const myRank = rank[me.role];
-  const allowed = Object.entries(E).filter(([key, e]) => myRank >= need[e.min] && !['exams', 'questions', 'results'].includes(key) && !(me.role === T && key === 'modules'));
+  const allowed = Object.entries(E).filter(([key, e]) => myRank >= need[e.min] && !(me.role === T && key === 'modules'));
   const groups = [...new Set(allowed.map(([, e]) => e.g))];
   const links = [`<button class="side-link" data-v="dash">${icon('grid', '', 18)}Overview</button>`];
   groups.forEach((g) => { links.push(`<div class="side-label">${g}</div>`); if (g === 'Learning') links.push(`<button class="side-link" data-v="builder">${icon('stack', '', 18)}Course builder</button>`); allowed.filter(([, e]) => e.g === g).forEach(([k, e]) => links.push(`<button class="side-link" data-v="${k}">${icon(e.ic, '', 18)}${e.t}</button>`)); });
@@ -237,9 +237,13 @@ if (!configured) {
       data = (result.data || []).map((student) => ({ ...student, id: student.student_id, created_at: student.joined_at }));
     } else {
       let q = supabase.from(e.table).select('*').order(e.order[0], { ascending: e.order[1] }).limit(500); if (e.filter) q = e.filter(q);
-      if (me.role === T && ['modules', 'lessons', 'resources', 'assignments', 'exams', 'discussions'].includes(key)) {
+      if (me.role === T && ['modules', 'lessons', 'resources', 'assignments', 'exams', 'questions', 'results', 'discussions'].includes(key)) {
         const courseIds = await assignedCourseIds();
-        q = courseIds.length ? q.in('course_id', courseIds) : q.eq('course_id', '00000000-0000-0000-0000-000000000000');
+        if (key === 'questions') {
+          const { data: ownedExams, error: examError } = await supabase.from('exams').select('id').in('course_id', courseIds.length ? courseIds : ['00000000-0000-0000-0000-000000000000']);
+          if (examError) { $('panel').innerHTML = empty('Could not load quizzes', examError.message); return; }
+          q = q.in('exam_id', (ownedExams || []).map((exam) => exam.id).length ? (ownedExams || []).map((exam) => exam.id) : ['00000000-0000-0000-0000-000000000000']);
+        } else q = courseIds.length ? q.in('course_id', courseIds) : q.eq('course_id', '00000000-0000-0000-0000-000000000000');
       }
       const result = await q; data = result.data; error = result.error;
     }
@@ -400,7 +404,7 @@ if (!configured) {
         if (!v.is_final && !v.module_id) errs.push('Choose a module or mark this as the final assessment');
         if (Number(v.pass_mark) < 50) errs.push('The minimum passing score is 50%.');
         if (v.is_final) v.module_id = null;
-        v.duration_min = 13;
+        if (!Number.isInteger(Number(v.duration_min)) || Number(v.duration_min) < 1 || Number(v.duration_min) > 180) errs.push('Quiz duration must be between 1 and 180 minutes.');
       }
       if (key === 'certificates') { /* names required above */ }
       if (errs.length) return toast(errs[0], 'err');
