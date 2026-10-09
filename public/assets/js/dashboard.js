@@ -33,6 +33,18 @@ if (!configured) {
   const ring = (p) => `<div class="ring-progress" style="--p:${p}"><b>${p}%</b></div>`;
   const cpStats = (p) => p ? `<div class="cp-stats"><span>Lessons ${p.lessons_done}/${p.lessons_total}</span><span>Assignments ${p.assignments_done}/${p.assignments_total}</span><span>Exams passed ${p.exams_passed}/${p.exams_total}</span><span>${p.eligible ? '<strong style="color:var(--ok)">Eligible for certificate</strong>' : 'Not yet eligible for certificate'}</span></div>` : '';
   const needCourse = (t) => empty('No active courses yet', t || 'Enrol in a course and complete payment to unlock this section.', '<a class="btn btn-lime" href="courses.html">Browse courses</a>');
+  const lessonVideo = (value, title) => {
+    if (!/^https?:\/\//i.test(value || '')) return '';
+    try {
+      const url = new URL(value);
+      if (/\.(mp4|webm|ogg)$/i.test(url.pathname)) return `<video controls preload="metadata" style="display:block;width:100%;max-height:480px;border-radius:8px;margin:16px 0"><source src="${esc(url.href)}"></video>`;
+      const youtubeId = url.hostname.endsWith('youtu.be') ? url.pathname.slice(1) : ['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(url.hostname) ? url.searchParams.get('v') : null;
+      if (youtubeId && /^[A-Za-z0-9_-]{11}$/.test(youtubeId)) return `<div style="aspect-ratio:16/9;margin:16px 0"><iframe src="https://www.youtube-nocookie.com/embed/${youtubeId}" title="${esc(title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy" style="width:100%;height:100%;border:0;border-radius:8px"></iframe></div>`;
+      const vimeoId = url.hostname === 'vimeo.com' || url.hostname === 'www.vimeo.com' ? url.pathname.split('/').filter(Boolean)[0] : url.hostname === 'player.vimeo.com' ? url.pathname.split('/').filter(Boolean)[1] : null;
+      if (vimeoId && /^\d+$/.test(vimeoId)) return `<div style="aspect-ratio:16/9;margin:16px 0"><iframe src="https://player.vimeo.com/video/${vimeoId}" title="${esc(title)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy" style="width:100%;height:100%;border:0;border-radius:8px"></iframe></div>`;
+      return `<p style="margin:14px 0"><a class="btn btn-outline btn-sm" href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${icon('video', '', 16)} Watch video</a></p>`;
+    } catch { return ''; }
+  };
 
   const V = {
     async overview() {
@@ -77,11 +89,12 @@ if (!configured) {
     async exams() {
       const act = await active(); if (!act.length) return needCourse();
       const ids = act.map((e) => e.course_id);
-      const [{ data: ex }, { data: rs }] = await Promise.all([supabase.from('exams').select('*').in('course_id', ids), supabase.from('exam_results').select('*').eq('user_id', me.id).order('taken_at', { ascending: false })]);
+      const [{ data: ex }, { data: rs }] = await Promise.all([supabase.from('exams').select('*, module:course_modules(title,position)').in('course_id', ids).eq('published', true).order('is_final').order('module_id'), supabase.from('exam_results').select('*').eq('user_id', me.id).order('taken_at', { ascending: false })]);
       S.exams = ex || [];
       if (!S.exams.length) return empty('No examinations yet', 'Examinations appear here when they are published for your course.');
       return `<div class="list">${S.exams.map((x) => { const r = (rs || []).filter((y) => y.exam_id === x.id); const best = r.length ? Math.max(...r.map((y) => Number(y.score))) : null; const passed = r.some((y) => y.passed);
-        return `<div class="list-item"><div class="grow"><h3>${esc(x.title)}</h3><p class="muted" style="font-size:.9rem">${x.duration_min} min · pass mark ${x.pass_mark}%${best !== null ? ` · best score ${best}%` : ''}</p></div><span class="badge ${passed ? 'ok' : r.length ? 'warn' : ''}">${passed ? 'Passed' : r.length ? 'Not passed yet' : 'Not taken'}</span><button class="btn btn-dark btn-sm" data-exam="${x.id}">${r.length ? 'Retake' : 'Start exam'}</button></div>`; }).join('')}</div>`;
+        const kind = x.is_final ? 'Final assessment' : x.module?.title ? `Module ${x.module.position}: ${x.module.title}` : 'Course assessment';
+        return `<div class="list-item"><div class="grow"><h3>${esc(x.title)}</h3><p class="muted" style="font-size:.9rem">${esc(kind)} · ${x.duration_min} min · pass mark ${x.pass_mark}%${best !== null ? ` · best score ${best}%` : ''}</p></div><span class="badge ${passed ? 'ok' : r.length ? 'warn' : ''}">${passed ? 'Passed' : r.length ? 'Not passed yet' : 'Not taken'}</span><button class="btn btn-dark btn-sm" data-exam="${x.id}">${r.length ? 'Retake' : 'Start assessment'}</button></div>`; }).join('')}</div>`;
     },
     async results() {
       const [{ data: rs }, { data: subs }] = await Promise.all([supabase.from('exam_results').select('*, exam:exams(title)').eq('user_id', me.id).order('taken_at', { ascending: false }), supabase.from('assignment_submissions').select('*, a:assignments(title,max_score)').eq('user_id', me.id).eq('status', 'graded')]);
@@ -143,10 +156,38 @@ if (!configured) {
   document.addEventListener('change', (e) => { if (e.target.id === 'lsCourse') show('lessons', e.target.value); });
   document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-lesson]')) { e.preventDefault(); openLesson(e.target.dataset.lesson); } });
 
-  function openLesson(id) {
+  async function openLesson(id) {
     const l = S.lessonList.find((x) => x.id === id); const done = S.doneSet.has(id);
-    const vid = /^https?:\/\//.test(l.video_url || '') ? `<p style="margin:14px 0"><a class="btn btn-outline btn-sm" href="${esc(l.video_url)}" target="_blank" rel="noopener noreferrer">${icon('video', '', 16)} Watch video</a></p>` : '';
-    const m = modal({ title: l.title, wide: true, body: `<div class="prose">${(l.content || '').split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join('')}</div>${vid}`, actions: `<button class="btn ${done ? 'btn-outline' : 'btn-lime'}" id="markBtn">${done ? 'Mark as not done' : 'Mark as complete'}</button>` });
+    const lessonIndex = S.lessonList.findIndex((lesson) => lesson.id === id);
+    const nextLesson = S.lessonList[lessonIndex + 1];
+    const vid = lessonVideo(l.video_url, l.title);
+    const { data: comments, error: discussionError } = await supabase.from('course_discussions').select('*').eq('lesson_id', id).order('created_at');
+    if (discussionError) return toast('Could not load this section discussion.', 'err');
+    const rows = comments || [];
+    const thread = rows.filter((comment) => !comment.parent_id).map((comment) => `<article class="review"><p><strong>${esc(comment.author_name || 'Student')}</strong><span class="muted" style="margin-left:8px;font-size:.85rem">${fmtDate(comment.created_at)}</span></p><p style="margin-top:8px;white-space:pre-wrap">${esc(comment.body)}</p><button class="btn btn-ghost btn-sm" type="button" data-reply="${comment.id}">Reply</button>${rows.filter((reply) => reply.parent_id === comment.id).map((reply) => `<div class="panel" style="margin:12px 0 0 20px"><p><strong>${esc(reply.author_name || 'Student')}</strong><span class="muted" style="margin-left:8px;font-size:.85rem">${fmtDate(reply.created_at)}</span></p><p style="margin-top:8px;white-space:pre-wrap">${esc(reply.body)}</p></div>`).join('')}</article>`).join('');
+    const actions = `<button class="btn ${done ? 'btn-outline' : 'btn-lime'}" id="markBtn">${done ? 'Mark as not done' : 'Mark as complete'}</button>${nextLesson ? `<button class="btn btn-dark" id="nextSection" ${done ? '' : 'disabled'}>Next section ${icon('arrow-right', '', 16)}</button>` : `<button class="btn btn-dark" id="openAssessment" ${done ? '' : 'disabled'}>Open assessments</button>`}`;
+    const m = modal({ title: l.title, wide: true, body: `<div class="prose">${(l.content || '').split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join('')}</div>${vid}<section class="block"><h3>Section discussion</h3>${thread || '<p class="muted">No discussion yet. Start the conversation with a question or note.</p>'}<form id="lessonDiscussionForm" style="margin-top:16px"><input type="hidden" id="discussionParent"><div class="field"><label for="discussionBody">Your message</label><textarea class="input" id="discussionBody" maxlength="4000" required></textarea></div><button class="btn btn-outline btn-sm" id="cancelReply" type="button" hidden>Cancel reply</button><button class="btn btn-dark btn-sm" type="submit">Post message</button></form></section>`, actions });
+    m.el.querySelector('#nextSection')?.addEventListener('click', () => { m.close(); openLesson(nextLesson.id); });
+    m.el.querySelector('#openAssessment')?.addEventListener('click', () => { m.close(); show('exams'); });
+    m.el.querySelectorAll('[data-reply]').forEach((button) => button.addEventListener('click', () => {
+      m.el.querySelector('#discussionParent').value = button.dataset.reply;
+      m.el.querySelector('#cancelReply').hidden = false;
+      m.el.querySelector('#discussionBody').focus();
+    }));
+    m.el.querySelector('#cancelReply').addEventListener('click', () => {
+      m.el.querySelector('#discussionParent').value = '';
+      m.el.querySelector('#cancelReply').hidden = true;
+    });
+    m.el.querySelector('#lessonDiscussionForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = m.el.querySelector('#discussionBody').value.trim();
+      if (!body) return;
+      const { error } = await supabase.from('course_discussions').insert({ course_id: l.course_id, module_id: l.module_id, lesson_id: l.id, user_id: me.id, parent_id: m.el.querySelector('#discussionParent').value || null, body });
+      if (error) return toast('Could not post your message. Please try again.', 'err');
+      m.close();
+      toast('Message posted', 'ok');
+      openLesson(id);
+    });
     m.el.querySelector('#markBtn').addEventListener('click', async (ev) => {
       setBusy(ev.currentTarget, true, 'Saving');
       const r = done ? await supabase.from('course_progress').delete().eq('lesson_id', id).eq('user_id', me.id) : await supabase.from('course_progress').insert({ user_id: me.id, course_id: l.course_id, lesson_id: id });
@@ -156,38 +197,78 @@ if (!configured) {
   }
   function openAssignment(id) {
     const a = S.assign.find((x) => x.id === id), s = S.subs[id]; const locked = s?.status === 'graded';
-    const m = modal({ title: a.title, body: `<p class="muted" style="margin-bottom:16px">${esc(a.instructions)}</p><form id="asForm"><div class="field"><label for="asText">Your answer</label><textarea class="input" id="asText" ${locked ? 'disabled' : ''} maxlength="8000">${esc(s?.content || '')}</textarea></div><div class="field"><label for="asLink">Link to your work (optional)</label><input class="input" id="asLink" type="url" placeholder="https://" value="${esc(s?.link_url || '')}" ${locked ? 'disabled' : ''}></div></form>${locked ? `<div class="alert ok">Graded: ${s.score}/${a.max_score}. ${esc(s.feedback || '')}</div>` : ''}`, actions: locked ? '' : '<button class="btn btn-lime" id="asSave">Submit assignment</button>' });
+    const m = modal({ title: a.title, body: `<p class="muted" style="margin-bottom:16px">${esc(a.instructions)}</p><form id="asForm"><div class="field"><label for="asText">Your answer</label><textarea class="input" id="asText" ${locked ? 'disabled' : ''} maxlength="8000">${esc(s?.content || '')}</textarea></div><div class="field"><label for="asLink">Link to your work (optional)</label><input class="input" id="asLink" type="url" placeholder="https://" value="${esc(s?.link_url || '')}" ${locked ? 'disabled' : ''}></div><div class="field"><label for="asFile">Upload answer file (optional, up to 50 MB)</label><input class="input" id="asFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*,video/*" ${locked ? 'disabled' : ''}>${s?.file_path ? `<span class="hint">A file is already submitted. Selecting a replacement will replace it after save.</span>` : ''}</div></form>${locked ? `<div class="alert ok">Graded: ${s.score}/${a.max_score}. ${esc(s.feedback || '')}</div>` : ''}`, actions: locked ? '' : '<button class="btn btn-lime" id="asSave">Submit assignment</button>' });
+    const existingFilePath = s?.file_path;
+    if (existingFilePath) {
+      supabase.storage.from('course-materials').createSignedUrl(existingFilePath, 3600).then(({ data }) => {
+        if (data?.signedUrl) m.el.querySelector('#asForm').insertAdjacentHTML('beforeend', `<p class="hint"><a href="${esc(data.signedUrl)}" target="_blank" rel="noopener noreferrer">Open submitted file</a></p>`);
+      });
+    }
     m.el.querySelector('#asSave')?.addEventListener('click', async (ev) => {
       const content = m.el.querySelector('#asText').value.trim(), link = m.el.querySelector('#asLink').value.trim();
-      if (!content && !link) return toast('Add an answer or a link first.', 'err');
+      const file = m.el.querySelector('#asFile').files[0];
+      if (!content && !link && !file && !existingFilePath) return toast('Add an answer, link, or file first.', 'err');
       if (link && !/^https?:\/\//.test(link)) return toast('Links must start with http:// or https://', 'err');
+      if (file && file.size > 50 * 1024 * 1024) return toast('Assignment file must be 50 MB or smaller.', 'err');
       setBusy(ev.currentTarget, true, 'Submitting');
-      const row = { content: content || null, link_url: link || null };
+      let filePath = existingFilePath || null;
+      if (file) {
+        filePath = `submissions/${me.id}/${id}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, '_')}`;
+        const { error: uploadError } = await supabase.storage.from('course-materials').upload(filePath, file, { upsert: false, contentType: file.type });
+        if (uploadError) { setBusy(ev.currentTarget, false); return toast(`Upload failed: ${uploadError.message}`, 'err'); }
+      }
+      const row = { content: content || null, link_url: link || null, file_path: filePath };
       const r = s ? await supabase.from('assignment_submissions').update({ ...row, submitted_at: new Date().toISOString() }).eq('id', s.id) : await supabase.from('assignment_submissions').insert({ ...row, assignment_id: id, user_id: me.id });
-      if (r.error) { setBusy(ev.currentTarget, false); return toast('Could not submit. Please try again.', 'err'); }
+      if (r.error) {
+        if (file) await supabase.storage.from('course-materials').remove([filePath]);
+        setBusy(ev.currentTarget, false); return toast('Could not submit. Please try again.', 'err');
+      }
+      if (file && existingFilePath) await supabase.storage.from('course-materials').remove([existingFilePath]);
       toast('Assignment submitted', 'ok'); m.close(); refreshAll(); show('assignments');
     });
   }
   async function openExam(id) {
     const x = S.exams.find((y) => y.id === id);
-    const { data: qs, error } = await supabase.rpc('get_exam_questions', { p_exam: id });
-    if (error || !qs?.length) return toast(error?.message || 'This exam has no questions yet.', 'err');
-    const m = modal({ title: x.title, wide: true, body: `<p class="muted" style="margin-bottom:16px">${esc(x.instructions || '')} Pass mark ${x.pass_mark}%.</p><form id="exForm">${qs.map((q, i) => `<fieldset class="q" style="border:1px solid var(--line)"><legend style="font-weight:700;padding:0 6px">${i + 1}. ${esc(q.question)}</legend>${arr(q.options).map((o, k) => `<label class="opt"><input type="radio" name="q_${q.id}" value="${k}"><span>${esc(o)}</span></label>`).join('')}</fieldset>`).join('')}</form><div id="exOut"></div>`, actions: '<button class="btn btn-lime" id="exSubmit">Submit exam</button>' });
-    m.el.querySelector('#exSubmit').addEventListener('click', async (ev) => {
-      const answers = {}; qs.forEach((q) => { const c = m.el.querySelector(`input[name="q_${q.id}"]:checked`); if (c) answers[q.id] = Number(c.value); });
-      if (Object.keys(answers).length < qs.length && !confirm('Some questions are unanswered. Submit anyway?')) return;
-      setBusy(ev.currentTarget, true, 'Marking');
-      const { data, error: e2 } = await supabase.rpc('submit_exam', { p_exam: id, p_answers: answers });
-      if (e2) { setBusy(ev.currentTarget, false); return toast(e2.message, 'err'); }
-      m.el.querySelector('#exForm').hidden = true; ev.currentTarget.hidden = true;
-      m.el.querySelector('#exOut').innerHTML = `<div class="alert ${data.passed ? 'ok' : 'err'}"><strong>${data.passed ? 'Passed' : 'Not passed'}: ${data.score}%</strong><br>${data.passed ? 'Well done.' : `You need ${data.pass_mark}% to pass. You can retake this exam.`}</div>`;
-      refreshAll(); loadEnrolls();
-    });
+    const { data: attempt, error } = await supabase.rpc('begin_exam', { p_exam: id });
+    if (error || !attempt?.questions?.length) return toast(error?.message || 'This assessment has no questions yet.', 'err');
+    const qs = attempt.questions;
+    const expiresAt = new Date(attempt.expires_at).getTime();
+    const m = modal({ title: x.title, wide: true, body: `<p class="muted" style="margin-bottom:8px">${esc(x.instructions || '')} Pass mark ${x.pass_mark}%.</p><p class="badge warn" id="examTimer" aria-live="polite"></p><form id="exForm">${qs.map((q, i) => `<fieldset class="q" style="border:1px solid var(--line)"><legend style="font-weight:700;padding:0 6px">${i + 1}. ${esc(q.question)}</legend>${arr(q.options).map((o, k) => `<label class="opt"><input type="radio" name="q_${q.id}" value="${k}"><span>${esc(o)}</span></label>`).join('')}</fieldset>`).join('')}</form><div id="exOut"></div>`, actions: '<button class="btn btn-lime" id="exSubmit">Submit assessment</button>' });
+    const submitButton = m.el.querySelector('#exSubmit');
+    let finished = false;
+    const submitAttempt = async (automatic = false) => {
+      if (finished) return;
+      const answers = {};
+      qs.forEach((q) => { const checked = m.el.querySelector(`input[name="q_${q.id}"]:checked`); if (checked) answers[q.id] = Number(checked.value); });
+      if (!automatic && Object.keys(answers).length < qs.length && !confirm('Some questions are unanswered. Submit anyway?')) return;
+      finished = true;
+      clearInterval(timer);
+      setBusy(submitButton, true, 'Submitting');
+      const { data, error: submitError } = await supabase.rpc('submit_exam_attempt', { p_attempt: attempt.attempt_id, p_answers: answers });
+      setBusy(submitButton, false);
+      if (submitError) { finished = false; return toast(submitError.message, 'err'); }
+      m.el.querySelector('#exForm').hidden = true;
+      submitButton.hidden = true;
+      const detail = data.expired ? 'Time expired; unanswered questions were marked incorrect.' : data.passed ? 'Well done.' : `You need ${data.pass_mark}% to pass. You can retake this assessment.`;
+      m.el.querySelector('#exOut').innerHTML = `<div class="alert ${data.passed ? 'ok' : 'err'}"><strong>${data.passed ? 'Passed' : 'Not passed'}: ${data.score}%</strong><br>${detail}</div>`;
+      refreshAll(); await loadEnrolls();
+    };
+    const updateTimer = () => {
+      const seconds = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      const minutesText = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const secondsText = String(seconds % 60).padStart(2, '0');
+      m.el.querySelector('#examTimer').textContent = `${minutesText}:${secondsText} remaining`;
+      if (seconds === 0) submitAttempt(true);
+    };
+    const timer = setInterval(updateTimer, 1000);
+    updateTimer();
+    submitButton.addEventListener('click', () => submitAttempt(false));
   }
   function openCert(id) {
     const c = S.certs.find((x) => x.id === id);
     const url = `${location.origin}/certificate-verify.html?n=${encodeURIComponent(c.certificate_number)}`;
-    modal({ title: 'Certificate', wide: true, body: `<div class="cert"><div class="cert-in"><div><img src="assets/images/logo-mark.svg" width="54" height="54" alt="" style="margin:0 auto 8px"><h3>${esc(cfg.organisation || 'Courssins Technology Institute')}</h3><small>Certificate of Completion</small></div><div><small>This certifies that</small><div class="who">${esc(c.student_name)}</div><p style="margin-top:12px"><small>has successfully completed</small></p><h3>${esc(c.course_title)}</h3><small>Completed on ${fmtDate(c.completed_at, { day: 'numeric', month: 'long', year: 'numeric' })}</small></div><div style="width:100%"><div class="cert-sign"><div>${esc(cfg.signatory || 'Authorised signatory')}<br><small>Authorised signature</small></div><div>${esc(c.certificate_number)}<br><small>Certificate number</small></div></div><p style="margin-top:12px"><small>Verify at ${esc(url)}</small></p></div></div></div>`, actions: `<a class="btn btn-outline" href="${esc(url)}" target="_blank" rel="noopener">Open verification page</a><button class="btn btn-lime" onclick="window.print()">Print or save as PDF</button>` });
+    const signature = /^https?:\/\//i.test(cfg.signature_url || '') ? `<img class="cert-signature" src="${esc(cfg.signature_url)}" alt="Signature of ${esc(cfg.signatory_name || 'authorised signatory')}">` : '';
+    modal({ title: 'Certificate', wide: true, body: `<div class="cert"><div class="cert-in"><div><img src="assets/images/logo-mark.svg" width="54" height="54" alt="" style="margin:0 auto 8px"><h3>${esc(cfg.organisation || 'Courssins Technology Institute')}</h3><small>Certificate of Completion</small></div><div><small>This certifies that</small><div class="who">${esc(c.student_name)}</div><p style="margin-top:12px"><small>has successfully completed</small></p><h3>${esc(c.course_title)}</h3><small>Completed on ${fmtDate(c.completed_at, { day: 'numeric', month: 'long', year: 'numeric' })}</small></div><div style="width:100%"><div class="cert-sign"><div style="border:0;padding:0">${signature}<div style="border-top:1.5px solid var(--ink);padding-top:6px">${esc(cfg.signatory_name || 'Authorised signatory')}<br><small>${esc(cfg.signatory || 'Director of Studies')}</small></div></div><div>${esc(c.certificate_number)}<br><small>Certificate number</small></div></div><p style="margin-top:12px"><small>Verify at ${esc(url)}</small></p></div></div></div>`, actions: `<a class="btn btn-outline" href="${esc(url)}" target="_blank" rel="noopener">Open verification page</a><button class="btn btn-lime" onclick="window.print()">Print or save as PDF</button>` });
   }
   document.addEventListener('submit', async (e) => {
     if (e.target.id === 'profForm') {

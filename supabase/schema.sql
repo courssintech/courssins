@@ -475,7 +475,6 @@ end $$;
 create policy profiles_select on public.profiles for select using (id = auth.uid() or public.is_admin());
 create policy profiles_update_own on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
 create policy profiles_update_admin on public.profiles for update using (public.is_admin()) with check (public.is_admin());
-create policy profiles_tutor_students_select on public.profiles for select using (role = 'student' and exists (select 1 from public.enrollments e where e.user_id = profiles.id and e.status = 'active' and public.owns_course(e.course_id)));
 create policy students_select on public.students for select using (user_id = auth.uid() or public.is_admin());
 create policy students_admin on public.students for all using (public.is_admin()) with check (public.is_admin());
 

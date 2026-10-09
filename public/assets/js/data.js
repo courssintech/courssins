@@ -181,7 +181,7 @@ export const settings = {
   membership: { title: 'Join Membership And Connect To Every Member', text: 'Get course announcements, study tips and new resources in your inbox. No spam, unsubscribe any time.' },
   site: { name: 'Courssins Technology Institute', description: 'Courssins Technology Institute is an online technology and professional skills institute in Nigeria, offering practical courses taught by working professionals.',
     email: 'support.courssintech@gmail.com', phone: '', address: 'Online, Nigeria', socials: { facebook: 'https://www.facebook.com/', instagram: 'https://www.instagram.com/courssintechinstitute?stkn=MXNwZDM5amlrbzh2cQ==', x: 'https://x.com/', linkedin: 'https://www.linkedin.com/' } },
-  certificate: { signatory: 'Director of Studies', organisation: 'Courssins Technology Institute' },
+  certificate: { signatory_name: 'Abdulmannan Sulayman', signatory: 'Director of Studies', organisation: 'Courssins Technology Institute', signature_url: '' },
 };
 
 export const pages = [

@@ -72,6 +72,7 @@ export async function getPage(slug) {
 }
 export const getReviews = (courseId) => configured && courseId ? run((s) => s.from('course_reviews').select('name,rating,comment,created_at').eq('course_id', courseId).eq('approved', true).order('created_at', { ascending: false }), []) : Promise.resolve([]);
 export const getTestimonials = () => configured ? run((s) => s.from('testimonials').select('id,name,quote,programme,image_url').eq('published', true).order('sort_order').limit(6), []) : Promise.resolve([]);
+export const getActiveAdvertisement = () => configured ? run((s) => s.from('advertisements').select('id,title,description,image_url,button_text,target_url').eq('active', true).or(`starts_at.is.null,starts_at.lte.${new Date().toISOString()}`).or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`).order('created_at', { ascending: false }).limit(1).maybeSingle(), null) : Promise.resolve(null);
 
 export async function subscribe(email) {
   if (!configured) return { ok: false, offline: true };

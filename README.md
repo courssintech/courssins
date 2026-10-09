@@ -18,7 +18,7 @@ courssins/
   supabase/
     schema.sql                 tables, RLS policies, RPC functions, storage bucket
     seed.sql                   sample courses, tutors, articles, library, settings, terms/privacy
-    migrations/                 additive upgrades for tutor assignments, users and private resources
+    migrations/                 additive upgrades for tutor assignments, private resources, assessments, discussions and ads
     functions/admin-users, resend-notifications       account management and email alerts
     functions/paystack-initialize, paystack-webhook   payment gateway (Edge Functions)
   scripts/  generate-seed.mjs  build-pages.py  make-images.py   (optional regeneration helpers)
@@ -26,8 +26,8 @@ courssins/
 
 ## 1. Set up Supabase (about 10 minutes)
 1. Create a project at supabase.com.
-2. **SQL Editor**: on a fresh, dedicated project, paste and run `supabase/schema.sql`, then run `supabase/seed.sql`. Do not run the baseline schema on a shared or established database: it recreates policies across the `public` schema.
-  For an existing Courssins installation, run the files in `supabase/migrations/` in filename order, then run `supabase/seed.sql` if you need the sample content. Back up the database first.
+2. **SQL Editor**: on a fresh, dedicated project, paste and run `supabase/schema.sql`, then run every file in `supabase/migrations/` in filename order, and finally run `supabase/seed.sql`. Do not run the baseline schema on a shared or established database: it recreates policies across the `public` schema.
+  For an existing Courssins installation, back up the database, run the files in `supabase/migrations/` in filename order, then run `supabase/seed.sql` to refresh the legal pages and supported defaults.
 3. Copy `.env.example` to `.env` and fill in your real values. The repo uses `scripts/link-env.mjs` to generate `public/assets/js/config.js` automatically from those environment variables before Vercel deploys the site. These two values are meant to be public. **Never** paste the `service_role` key anywhere in `public/`.
 4. **Authentication > URL Configuration**: set Site URL to `https://courssin.com.ng` and add `https://courssin.com.ng/login.html` to Redirect URLs (needed for email confirmation and password reset). Configure an SMTP provider for production email volume. Set the sender/support address to `support.courssintech@gmail.com` where appropriate.
 5. Sign up on the website, then make yourself Super Admin by running this in the SQL Editor:
@@ -46,6 +46,7 @@ courssins/
   supabase functions deploy resend-notifications --no-verify-jwt
   ```
   Replace each placeholder with a valid value. `<real-inbox>` must be an address or alias that is actually configured to receive mail; a wildcard address is not a destination. The Resend API key and destination are used only by the Edge Function, never by browser code. Contact submissions and new membership signups are saved first; notifications are rate-limited and duplicate sends are suppressed.
+9. **Certificate signature**: after the migration is applied, open Admin > Website content > Certificate signature and upload the provided signature image. Set the signatory name and title there; newly issued certificates render the image when printed.
 
 ## 2. Deploy to Vercel
 Import the folder (or push to GitHub and import). Framework preset: **Other**. `vercel.json` runs `node scripts/link-env.mjs` before deployment and serves the generated `public` folder. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SITE_URL=https://courssin.com.ng`, and `PAYMENT_INIT_URL=https://ohkrwdmiqlkjcsnzbmma.supabase.co/functions/v1/paystack-initialize` in Vercel Environment Variables (and in `.env` for local development). Configure the custom domain in Vercel and update Supabase Authentication > URL Configuration with the Site URL and redirect URL above.
@@ -66,22 +67,23 @@ Set the Paystack webhook URL to `https://<project>.supabase.co/functions/v1/pays
 ## Roles and security model
 | Role | Can do (enforced by database policies, not by the browser) |
 |---|---|
-| student | read own profile, enrolments, payments, results, certificates; submit assignments/exams; mark lessons done |
-| tutor | manage modules, lessons, private course resources, assignments, exams, grade submissions, and view enrolled students **for courses assigned to them** |
-| admin | everything above plus students, courses, tutors, payments, certificates, events, library, blog, newsletter, messages |
-| super_admin | also custom pages, website content/settings, and user roles |
+| student | read own profile, enrolments, payments, results, certificates; complete lessons, submit assignment text/files, join lesson discussions, and take timed assessments |
+| tutor | use Course Builder for assigned courses; manage modules, lessons, private resources, assignments and assessments; grade submissions; view enrolled students and discussions **for courses assigned to them**; edit their own tutor profile |
+| admin | everything above plus students, courses, tutors, payments, certificates, events, advertisements, library, blog, newsletter, messages and discussions |
+| super_admin | also invite/manage staff accounts, custom pages, website settings, roles and certificate signature |
 
-Key protections: public signups always create `student` accounts; tutor/admin accounts are invited by the Super Admin through the server-side Edge Function; role and active-status changes are Super Admin-only. Disabled accounts lose authentication access and tutor course ownership. Private course-resource files are stored separately from public media and signed for active enrollees. Exam answer keys are readable by staff only (students get questions through `get_exam_questions`, and scoring happens in `submit_exam`); certificates are issued by `claim_certificate` only when every lesson, assignment and exam is complete; public certificate verification returns only name, course and dates for an exact certificate number.
+Key protections: public signups always create `student` accounts; tutor/admin accounts are invited by the Super Admin through the server-side Edge Function; role and active-status changes are Super Admin-only. Disabled accounts lose authentication access and tutor course ownership. Private course resources and assignment submissions use the private storage bucket with enrollment/ownership policies and signed downloads. Module lessons remain locked until prior module assessments are passed. Module assessments require 7 questions; the final assessment requires 15, and server-side timers prevent client-only score submission. `begin_exam` returns questions without answer keys and `submit_exam_attempt` scores an unexpired attempt. Certificates require completed lessons, tutor-graded assignments, passed assessments, and a passed final assessment. Public certificate verification returns only name, course and dates for an exact certificate number.
 
 Custom pages: admin-written HTML is sanitised (scripts, iframes, forms and event handlers removed) and shown inside a Shadow DOM so page CSS cannot restyle the site. No server-side code is executed.
 
 ## Things to do before launch
 - **Replace sample content.** Tutor names, bios, qualifications, prices, durations, the 10+/99%/500+/600+ statistics, contact email and social links are placeholders. Edit them in Admin (Tutors, Courses, Website content). Only publish statistics that are true.
 - **Replace the placeholder artwork** in `assets/images` (or upload photos in Admin and paste the URL). Files are SVG illustrations because no photographs were available; real photography will lift the design considerably.
-- Terms and Privacy are starter texts; have them reviewed by a qualified adviser.
+- Terms and Privacy pages are editable policy drafts; have them reviewed by a qualified adviser before relying on them.
+- Upload the institute signature in Admin > Website content > Certificate signature. Certificates use that uploaded image when printed.
 - Dynamic pages (course, tutor, article, custom page) set their title, description and structured data with JavaScript. Google renders this, but some social-preview crawlers do not read it; those show the generic page tags.
 - Lessons are created with placeholder notes from the seed; add real notes and videos in Admin > Lessons.
-- Add exams and assignments in Admin before students can complete a course (a course with none of them is never "complete" for certificate purposes unless it has lessons).
+- Add at least one published final assessment (15 questions), any module assessments (7 questions each), lessons, and assignments; students cannot receive a certificate until those requirements are completed and passed/graded.
 
 ## Running locally
 Copy `.env.example` to `.env`, fill in your values, then run `node scripts/link-env.mjs` before serving the site. Any static server works: `cd public && python3 -m http.server 8000`. Without keys in the env file or Vercel environment variables the site runs on sample content and shows clear "connect Supabase" messages where accounts are needed.
