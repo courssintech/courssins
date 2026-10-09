@@ -2,9 +2,10 @@
 import { getSetting } from './api.js';
 import { esc, money, fmtDate, icon, modal, toast, setBusy, empty, arr } from './ui.js';
 import { CONFIG } from './config.js';
+import { joinGroupPresence, loadGroupMembers, renderGroupMembers, renderTypingIndicator } from './group-presence.js';
 
 const $ = (id) => document.getElementById(id);
-const TABS = [['overview', 'Overview', 'home'], ['courses', 'My courses', 'book'], ['lessons', 'Lessons', 'play'], ['assignments', 'Assignments', 'file'], ['career', 'Projects and CV', 'award'], ['certificates', 'Certificates', 'award'], ['id-card', 'Course ID cards', 'user'], ['discussions', 'Course discussions', 'chat'], ['library', 'Library', 'stack'], ['events', 'Events', 'calendar'], ['tickets', 'My event tickets', 'calendar'], ['payments', 'Payment history', 'card'], ['notifications', 'Notifications', 'bell'], ['settings', 'Account settings', 'settings']];
+const TABS = [['overview', 'Overview', 'home'], ['courses', 'My courses', 'book'], ['lessons', 'Lessons', 'play'], ['assignments', 'Assignments', 'file'], ['career', 'Projects and CV', 'award'], ['certificates', 'Certificates', 'award'], ['id-card', 'Course ID cards', 'user'], ['messages', 'Messages', 'chat'], ['discussions', 'Course discussions', 'chat'], ['library', 'Library', 'stack'], ['events', 'Events', 'calendar'], ['tickets', 'My event tickets', 'calendar'], ['payments', 'Payment history', 'card'], ['notifications', 'Notifications', 'bell'], ['settings', 'Account settings', 'settings']];
 $('sideNav').innerHTML = TABS.map(([k, l, i]) => `<button class="side-link" type="button" data-tab="${k}">${icon(i, '', 18)}<span>${l}</span><span class="badge" data-badge="${k}" hidden style="margin-left:auto"></span></button>`).join('');
 $('signOutBtn').addEventListener('click', signOut);
 const side = $('sidebar'), scrim = $('scrim');
@@ -19,8 +20,15 @@ if (!configured) {
 } else {
   const me = await requireAuth();
   $('whoami').textContent = me.full_name || me.email;
+  const liveStatus = document.createElement('span'); liveStatus.className = 'dashboard-live is-connecting'; liveStatus.setAttribute('role', 'status'); liveStatus.innerHTML = '<i></i><span>Connecting</span><time></time>'; $('whoami').insertAdjacentElement('afterend', liveStatus);
+  const setLiveStatus = (state, label) => { liveStatus.className = `dashboard-live ${state}`; liveStatus.querySelector('span').textContent = label; };
+  const updateLiveClock = () => { liveStatus.querySelector('time').textContent = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()); };
+  updateLiveClock(); setInterval(updateLiveClock, 30000);
   const cfg = (await getSetting('certificate')) || {};
   const S = { enrolls: null, prog: {}, lessons: {}, done: null, certCourses: [] };
+  let groupChatChannel = null;
+  const groupPresenceChannels = new Map();
+  const typingTimers = new Map();
   const loadEnrolls = async () => {
     if (S.enrolls) return S.enrolls;
     const [{ data }, { data: certificates }] = await Promise.all([supabase.from('enrollments').select('*, course:courses(id,slug,title,image_url,duration,price,currency,category,lessons_start_at)').eq('user_id', me.id).order('enrolled_at', { ascending: false }), supabase.from('certificates').select('course_id').eq('user_id', me.id).eq('status', 'valid')]);
@@ -41,14 +49,14 @@ if (!configured) {
       const { count: unread } = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).eq('read', false);
       const avg = act.length ? Math.round(act.reduce((n, e) => n + (S.prog[e.course_id]?.percent || 0), 0) / act.length) : 0;
       return `<div class="kpis"><button class="kpi lime" data-go="courses"><b>${act.length}</b><span>Active courses</span></button><button class="kpi" data-go="lessons"><b>${avg}%</b><span>Average progress</span></button><button class="kpi" data-go="certificates"><b>${certs || 0}</b><span>Certificates</span></button><button class="kpi" data-go="notifications"><b>${unread || 0}</b><span>Unread notifications</span></button></div>
-      <div class="panel"><h2>Continue learning</h2>${act.length ? act.map((e) => `<div class="course-progress">${ring(S.prog[e.course_id]?.percent || 0)}<div><h3>${esc(e.course.title)}</h3>${e.course.lessons_start_at && new Date(e.course.lessons_start_at) > new Date() ? `<p class="alert info">Lessons and materials open ${fmtDate(e.course.lessons_start_at)}. Course outline is available now.</p>` : ''}${bar(S.prog[e.course_id]?.percent || 0)}${cpStats(S.prog[e.course_id])}<button class="btn btn-dark btn-sm" style="margin-top:12px" data-go="lessons" data-course="${e.course_id}">${e.course.lessons_start_at && new Date(e.course.lessons_start_at) > new Date() ? 'View course outline' : 'Open lessons'}</button></div></div>`).join('') : needCourse()}</div>
+      <div class="panel"><h2>Continue learning</h2>${act.length ? act.map((e) => `<div class="course-progress">${ring(S.prog[e.course_id]?.percent || 0)}<div><h3>${esc(e.course.title)}</h3>${e.course.lessons_start_at && new Date(e.course.lessons_start_at) > new Date() ? `<p class="alert info">Lessons and materials open ${fmtDate(e.course.lessons_start_at)}. Course outline is available now.</p>` : ''}${bar(S.prog[e.course_id]?.percent || 0)}${cpStats(S.prog[e.course_id])}<a class="btn btn-dark btn-sm" style="margin-top:12px" href="course.html?id=${esc(e.course.slug)}&learn=1">${e.course.lessons_start_at && new Date(e.course.lessons_start_at) > new Date() ? 'View course outline' : 'Continue learning'}</a></div></div>`).join('') : needCourse()}</div>
       <div class="panel"><h2>Your profile</h2><ul class="facts" style="margin:0"><li>${icon('user')}<span>${esc(me.full_name || 'Add your name in settings')}</span></li><li>${icon('mail')}<span>${esc(me.email)}</span></li><li>${icon('phone')}<span>${esc(me.phone || 'No phone number')}</span></li><li>${icon('globe')}<span>${esc(me.country || 'No country set')}</span></li></ul></div>`;
     },
     async courses() {
       const en = await loadEnrolls(); if (!en.length) return needCourse('You have not enrolled in a course yet.');
       return `<div class="tools"><span class="grow"></span><a class="btn btn-lime btn-sm" href="courses.html">${icon('plus', '', 16)} Add a course</a></div><div class="list">${en.map((e) => `<div class="list-item"><div class="grow"><h3>${esc(e.course.title)}</h3>${e.course.lessons_start_at ? `<p class="muted">Lessons and materials start ${fmtDate(e.course.lessons_start_at)}</p>` : `<p class="muted">Lesson start date has not been set yet.</p>`}<p class="muted" style="font-size:.9rem">${esc(e.course.duration)} Â· enrolled ${fmtDate(e.enrolled_at)}</p>${e.status === 'active' ? `${bar(S.prog[e.course_id]?.percent || 0)}${cpStats(S.prog[e.course_id])}` : ''}</div>
       <span class="badge ${e.status === 'active' || S.certCourses.includes(e.course_id) ? 'ok' : 'warn'}">${S.certCourses.includes(e.course_id) ? 'Certified Â· access retained' : e.status === 'active' ? 'Unlocked' : e.status === 'pending' ? 'Awaiting payment' : 'Cancelled'}</span>
-      ${e.status === 'active' || S.certCourses.includes(e.course_id) ? `<button class="btn btn-dark btn-sm" data-go="lessons" data-course="${e.course_id}">Open</button>` : e.status === 'pending' ? `<button class="btn btn-outline btn-sm" data-go="lessons" data-course="${e.course_id}">View outline</button><a class="btn btn-lime btn-sm" href="course.html?id=${esc(e.course.slug)}&enroll=1">Complete payment</a>` : ''}</div>`).join('')}</div>`;
+      ${e.status === 'active' || S.certCourses.includes(e.course_id) ? `<a class="btn btn-dark btn-sm" href="course.html?id=${esc(e.course.slug)}&learn=1">Continue learning</a>` : e.status === 'pending' ? `<a class="btn btn-outline btn-sm" href="course.html?id=${esc(e.course.slug)}">View outline</a><a class="btn btn-lime btn-sm" href="course.html?id=${esc(e.course.slug)}&enroll=1">Complete payment</a>` : ''}</div>`).join('')}</div>`;
     },
     async lessons(courseId) {
       const enrolled = await loadEnrolls();
@@ -128,7 +136,8 @@ if (!configured) {
       if (!groups?.length) return empty('No course discussions', 'Your tutor will share assignments and course updates here.');
       const { data: posts } = await supabase.from('tutor_group_posts').select('*').in('group_id', groups.map((g) => g.id)).order('created_at', { ascending: false });
       const ids = (posts || []).map((p) => p.id); const { data: reactions } = ids.length ? await supabase.from('tutor_group_reactions').select('post_id,reaction,user_id').in('post_id', ids) : { data: [] };
-      return groups.map((g) => `<section class="panel discussion-panel"><header class="discussion-head"><span class="messenger-avatar">${esc(g.title.slice(0, 1).toUpperCase())}</span><div><h2>${esc(g.title)}</h2><p class="muted">Course discussion</p></div></header><div class="discussion-stream">${(posts || []).filter((p) => p.group_id === g.id).map((post) => { const rs = (reactions || []).filter((r) => r.post_id === post.id); return `<article class="chat-bubble discussion-bubble"><span class="badge">${post.post_type === 'assignment' ? 'Assignment' : 'Tutor update'}</span>${post.title ? `<h3 style="margin-top:8px">${esc(post.title)}</h3>` : ''}<p>${esc(post.body)}</p>${post.attachment_url ? `<a href="${esc(post.attachment_url)}" target="_blank" rel="noopener noreferrer">Open attachment</a>` : ''}${post.assignment_id ? '<button class="btn btn-dark btn-sm" style="margin-top:8px" data-go="assignments">Open assignment and submit</button>' : ''}<div class="btn-row" style="margin-top:10px">${['👍','❤️','👏','✅'].map((emoji) => `<button class="btn btn-ghost btn-sm" data-react-post="${post.id}" data-reaction="${emoji}">${emoji} ${rs.filter((r) => r.reaction === emoji).length}</button>`).join('')}</div><time>${fmtDate(post.created_at)}</time></article>`; }).join('') || '<p class="muted">No posts yet.</p>'}</div></section>`).join('');
+      const nameFor = (post) => post.author_id === me.id ? 'You' : post.author_name || 'Course member';
+      return groups.map((g) => `<section class="panel discussion-panel"><header class="discussion-head"><span class="messenger-avatar">${esc(g.title.slice(0, 1).toUpperCase())}</span><div class="discussion-heading-copy"><h2>${esc(g.title)}</h2><p class="muted">Course chat · tutor updates and assignments</p><small class="group-online-count" data-group-count="${g.id}">Checking members…</small></div><button class="btn btn-outline btn-sm group-info-toggle" type="button" data-group-info="${g.id}" aria-expanded="false">${icon('users', '', 16)} Group info</button></header><aside class="group-info-menu" data-group-menu="${g.id}" hidden><div class="group-info-title"><strong>Group members</strong><button class="icon-btn" type="button" data-group-info-close="${g.id}" aria-label="Close group info">${icon('x', '', 16)}</button></div><ul class="group-member-list" id="members-${g.id}"><li class="muted">Loading members…</li></ul></aside><div class="discussion-stream" id="chat-${g.id}">${(posts || []).filter((p) => p.group_id === g.id).sort((a,b) => new Date(a.created_at)-new Date(b.created_at)).map((post) => { const rs = (reactions || []).filter((r) => r.post_id === post.id); const isMine = post.author_id === me.id && post.post_type === 'message'; return `<article class="chat-bubble discussion-bubble ${isMine ? 'mine' : ''}" data-chat-message="${post.id}"><strong>${esc(nameFor(post))}</strong><span class="badge">${post.post_type === 'assignment' ? 'Assignment' : 'Message'}</span>${post.title ? `<h3 style="margin-top:8px">${esc(post.title)}</h3>` : ''}<p>${esc(post.body)}</p>${post.attachment_url ? `<a href="${esc(post.attachment_url)}" target="_blank" rel="noopener noreferrer">Open attachment</a>` : ''}${post.assignment_id ? '<button class="btn btn-dark btn-sm" style="margin-top:8px" data-go="assignments">Open assignment and submit</button>' : ''}<div class="btn-row discussion-reactions" style="margin-top:10px">${['👍','❤️','👏','✅'].map((emoji) => `<button class="btn btn-ghost btn-sm" data-react-post="${post.id}" data-reaction="${emoji}">${emoji} ${rs.filter((r) => r.reaction === emoji).length}</button>`).join('')}</div><time>${fmtDate(post.created_at)}</time></article>`; }).join('') || '<p class="muted">Start the conversation with your course group.</p>'}<div class="chat-typing" id="typing-${g.id}" aria-live="polite" hidden></div></div><form class="discussion-compose" data-group-chat="${g.id}"><textarea class="input" name="message" placeholder="Write a message to your course group…" maxlength="5000" required aria-label="Message to course group"></textarea><button class="btn btn-lime" type="submit">${icon('arrow-right', '', 16)} Send</button></form></section>`).join('');
     },
     async library() {
       const { data } = await supabase.from('library').select('*').eq('published', true).order('created_at', { ascending: false });
@@ -159,6 +168,8 @@ if (!configured) {
       <div class="panel" style="max-width:640px"><h2>Change password</h2><form id="pwForm" novalidate><div class="field"><label for="pw1">New password</label><input class="input" id="pw1" type="password" autocomplete="new-password" minlength="8"></div><button class="btn btn-dark" type="submit">Update password</button></form></div>`;
     },
   };
+
+  V.messages = (...args) => V.discussions(...args);
 
   V.career = async function career() {
     const en = await active(); if (!en.length) return needCourse();
@@ -192,14 +203,49 @@ if (!configured) {
     $('sideNav').querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === tab));
     $('panelTitle').textContent = TABS.find((t) => t[0] === tab)[1]; toggleSide(false); busyPanel();
     try { $('panel').innerHTML = await V[tab](arg); } catch (e) { console.error(e); $('panel').innerHTML = empty('Something went wrong', 'We could not load this section. Please refresh and try again.'); }
+    if (groupChatChannel) { supabase.removeChannel(groupChatChannel); groupChatChannel = null; }
+    groupPresenceChannels.forEach((presence) => { presence.disposed = true; clearTimeout(presence.typingTimer); presence.connection.stop(); }); groupPresenceChannels.clear(); typingTimers.clear();
+    if (tab === 'messages' || tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => { const stream = $(`chat-${form.dataset.groupChat}`); if (stream) stream.scrollTop = stream.scrollHeight; });
+    if (tab === 'messages' || tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => {
+      const groupId = form.dataset.groupChat, state = { members: [], presence: {}, connection: null, typingTimer: null };
+      const updatePresence = (presence) => { if (state.disposed) return; const wasOnline = Object.values(state.presence).flat().filter((member) => member.user_id).map((member) => member.user_id).sort().join(','); const isOnline = Object.values(presence).flat().filter((member) => member.user_id).map((member) => member.user_id).sort().join(','); state.presence = presence; renderTypingIndicator($(`typing-${groupId}`), presence, me); renderGroupMembers(state.members, presence, $(`members-${groupId}`), (total, online) => { const counter = document.querySelector(`[data-group-count="${groupId}"]`); if (counter) counter.textContent = `${online} online · ${total} members`; }); const menu = document.querySelector(`[data-group-menu="${groupId}"]`); if (wasOnline !== isOnline && menu && !menu.hidden) loadGroupMembers(supabase, groupId).then(({ members }) => { if (state.disposed || groupPresenceChannels.get(groupId) !== state || !members) return; state.members = members; renderGroupMembers(members, state.presence, $(`members-${groupId}`)); }); };
+      state.connection = joinGroupPresence(supabase, groupId, me, updatePresence); groupPresenceChannels.set(groupId, state);
+      loadGroupMembers(supabase, groupId).then(({ members, error }) => { if (groupPresenceChannels.get(groupId) !== state) return; if (error) { const target = $(`members-${groupId}`); if (target) target.innerHTML = `<li class="muted">${esc(error.message)}</li>`; return; } state.members = members; updatePresence(state.presence); });
+    });
+    if (tab === 'messages' || tab === 'discussions') groupChatChannel = supabase.channel(`course-chat-${me.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tutor_group_posts' }, async ({ new: post }) => {
+      const stream = $(`chat-${post.group_id}`); if (!stream || stream.querySelector(`[data-chat-message="${post.id}"]`)) return;
+      const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 100;
+      const authorName = post.author_id === me.id ? 'You' : post.author_name || 'Course member';
+      const bubble = document.createElement('article'); bubble.className = `chat-bubble discussion-bubble ${post.author_id === me.id && post.post_type === 'message' ? 'mine' : ''}`; bubble.dataset.chatMessage = post.id;
+      bubble.innerHTML = `<strong>${esc(authorName)}</strong><span class="badge">${post.post_type === 'assignment' ? 'Assignment' : 'Message'}</span>${post.title ? `<h3 style="margin-top:8px">${esc(post.title)}</h3>` : ''}<p>${esc(post.body)}</p>${post.attachment_url ? `<a href="${esc(post.attachment_url)}" target="_blank" rel="noopener noreferrer">Open attachment</a>` : ''}${post.assignment_id ? '<button class="btn btn-dark btn-sm" style="margin-top:8px" data-go="assignments">Open assignment and submit</button>' : ''}<div class="btn-row discussion-reactions" style="margin-top:10px">${['👍','❤️','👏','✅'].map((emoji) => `<button class="btn btn-ghost btn-sm" data-react-post="${post.id}" data-reaction="${emoji}">${emoji} 0</button>`).join('')}</div><time>${fmtDate(post.created_at)}</time>`;
+      stream.querySelector('.muted')?.remove(); stream.append(bubble); if (nearBottom) stream.scrollTop = stream.scrollHeight;
+    }).subscribe();
     $('panel').querySelector('.bar i, .ring-progress') && requestAnimationFrame(() => $('panel').querySelectorAll('.bar i').forEach((i) => { const w = i.style.width; i.style.width = '0'; requestAnimationFrame(() => (i.style.width = w)); }));
     if (location.hash.slice(1).split('?')[0] !== tab) history.replaceState(null, '', `#${tab}`);
   }
   const route = () => show(location.hash.slice(1).split('?')[0] || 'overview');
   addEventListener('hashchange', route);
+  let overviewRefresh = null;
+  const studentLiveChannel = supabase.channel(`student-dashboard-live-${me.id}`);
+  ['enrollments','course_progress','assignment_submissions','exam_results','certificates','notifications'].forEach((table) => studentLiveChannel.on('postgres_changes', { event: '*', schema: 'public', table }, ({ table: changedTable }) => {
+    const currentTab = location.hash.slice(1).split('?')[0] || 'overview';
+    if (currentTab === 'overview' && !overviewRefresh) overviewRefresh = setTimeout(() => { overviewRefresh = null; refreshAll(); show('overview'); }, 450);
+    else if (currentTab === 'notifications' && changedTable === 'notifications') show('notifications');
+  }));
+  studentLiveChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') setLiveStatus('is-live', 'Live');
+    else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setLiveStatus('is-offline', 'Reconnecting');
+  });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-react-post],[data-book-event]'); if (!t) return;
+    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-react-post],[data-book-event],[data-group-info],[data-group-info-close]'); if (!t) return;
+    if (t.dataset.groupInfo || t.dataset.groupInfoClose) {
+      const groupId = t.dataset.groupInfo || t.dataset.groupInfoClose, menu = document.querySelector(`[data-group-menu="${groupId}"]`), state = groupPresenceChannels.get(groupId); if (!menu || !state) return;
+      const open = t.dataset.groupInfo ? menu.hidden : false; menu.hidden = !open;
+      document.querySelector(`[data-group-info="${groupId}"]`)?.setAttribute('aria-expanded', String(open));
+      if (open) renderGroupMembers(state.members, state.presence, $(`members-${groupId}`), (total, online) => { const counter = document.querySelector(`[data-group-count="${groupId}"]`); if (counter) counter.textContent = `${online} online · ${total} members`; });
+      return;
+    }
     if (t.dataset.tab) return void show(t.dataset.tab);
     if (t.dataset.go) return void show(t.dataset.go, t.dataset.course);
     if (t.dataset.lesson) return location.assign(`learn.html?lesson=${encodeURIComponent(t.dataset.lesson)}`);
@@ -209,7 +255,7 @@ if (!configured) {
     if (t.dataset.cert) return openCert(t.dataset.cert);
     if (t.dataset.readall) { await supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false); return void show('notifications'); }
     if (t.dataset.noticeRead) { const { error } = await supabase.from('notifications').update({ read: true }).eq('id', t.dataset.noticeRead).eq('user_id', me.id); if (error) return toast(error.message, 'err'); return void show('notifications'); }
-    if (t.dataset.reactPost) { const { error } = await supabase.from('tutor_group_reactions').insert({ post_id: t.dataset.reactPost, user_id: me.id, reaction: t.dataset.reaction }); if (error && !/duplicate key/i.test(error.message)) return toast(error.message, 'err'); return void show('discussions'); }
+    if (t.dataset.reactPost) { const { error } = await supabase.from('tutor_group_reactions').insert({ post_id: t.dataset.reactPost, user_id: me.id, reaction: t.dataset.reaction }); if (error && !/duplicate key/i.test(error.message)) return toast(error.message, 'err'); return void show(location.hash.slice(1).split('?')[0] || 'discussions'); }
     if (t.dataset.bookEvent) {
       setBusy(t, true, 'Booking'); const { data, error } = await supabase.rpc('book_event_ticket', { p_event: t.dataset.bookEvent });
       if (error) { setBusy(t, false); return toast(error.message, 'err'); }
@@ -220,6 +266,27 @@ if (!configured) {
     }
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'lsCourse') show('lessons', e.target.value); });
+  document.addEventListener('input', (e) => {
+    const form = e.target.closest('form[data-group-chat]'); if (!form || e.target.name !== 'message') return;
+    const groupId = form.dataset.groupChat, state = groupPresenceChannels.get(groupId); if (!state) return;
+    clearTimeout(state.typingTimer);
+    if (!typingTimers.has(groupId) && e.target.value.trim()) { state.connection.trackTyping(true); typingTimers.set(groupId, true); }
+    state.typingTimer = setTimeout(() => { state.connection.trackTyping(false); typingTimers.delete(groupId); }, 1300);
+  });
+  document.addEventListener('focusout', (e) => {
+    const form = e.target.closest('form[data-group-chat]'); if (!form || e.target.name !== 'message') return;
+    const groupId = form.dataset.groupChat, state = groupPresenceChannels.get(groupId); if (!state) return;
+    clearTimeout(state.typingTimer); state.connection.trackTyping(false); typingTimers.delete(groupId);
+  });
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest('[data-group-chat]'); if (!form) return;
+    e.preventDefault(); const body = form.elements.message.value.trim(); if (!body) return;
+    const state = groupPresenceChannels.get(form.dataset.groupChat); if (state) { clearTimeout(state.typingTimer); state.connection.trackTyping(false); typingTimers.delete(form.dataset.groupChat); }
+    const button = form.querySelector('button[type="submit"]'); setBusy(button, true, 'Sending');
+    const { error } = await supabase.from('tutor_group_posts').insert({ group_id: form.dataset.groupChat, author_id: me.id, post_type: 'message', body });
+    if (error) { setBusy(button, false); return toast(error.message, 'err'); }
+    form.elements.message.value = ''; setBusy(button, false); toast('Message sent', 'ok');
+  });
   function openAssignment(id) {
     const a = S.assign.find((x) => x.id === id), s = S.subs[id]; const locked = s?.status === 'graded';
     const m = modal({ title: a.title, body: `<p class="muted" style="margin-bottom:16px">${esc(a.instructions)}</p>${a.due_at ? `<p class="alert info">${a.is_project ? "Project" : "Assignment"} deadline: ${fmtDate(a.due_at)}</p>` : ""}<form id="asForm"><div class="field"><label for="asText">Your answer</label><textarea class="input" id="asText" ${locked ? 'disabled' : ''} maxlength="8000">${esc(s?.content || '')}</textarea></div><div class="field"><label for="asLink">Link to your work (optional)</label><input class="input" id="asLink" type="url" placeholder="https://" value="${esc(s?.link_url || '')}" ${locked ? 'disabled' : ''}></div><div class="field"><label for="asFile">Upload answer file (optional, up to 50 MB)</label><input class="input" id="asFile" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*,video/*" ${locked ? 'disabled' : ''}>${s?.file_path ? `<span class="hint">A file is already submitted. Selecting a replacement will replace it after save.</span>` : ''}</div></form>${locked ? `<div class="alert ok">Graded: ${s.score}/${a.max_score}. ${esc(s.feedback || '')}</div>` : ''}`, actions: locked ? '' : '<button class="btn btn-lime" id="asSave">Submit assignment</button>' });
