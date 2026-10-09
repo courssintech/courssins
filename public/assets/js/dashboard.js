@@ -150,7 +150,9 @@ if (!configured) {
     },
     async notifications() {
       const { data } = await supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(50);
-      return data?.length ? `<div class="tools"><span class="grow"></span><button class="btn btn-ghost btn-sm" data-readall>Mark all as read</button></div><div class="list">${data.map((n) => `<div class="list-item" style="${n.read ? '' : 'border-color:var(--ink);background:#fbfff0'}"><div class="grow"><h3>${esc(n.title)}</h3><p class="muted" style="font-size:.95rem">${esc(n.body)}</p><p class="muted" style="font-size:.8rem;margin-top:4px">${fmtDate(n.created_at)}</p></div>${n.link ? `<a class="btn btn-outline btn-sm" href="${esc(n.link)}">Open</a>` : ''}</div>`).join('')}</div>` : empty('No notifications', 'Updates about payments, grades and certificates show up here.');
+      if (!data?.length) return empty('You’re all caught up', 'Updates about your courses, projects and certificates will appear here.');
+      const unread = data.filter((n) => !n.read).length;
+      return `<section class="notifications-page"><header class="notifications-heading"><div><span class="eyebrow">YOUR UPDATES</span><h2>Notifications</h2><p>${unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You have read all your updates.'}</p></div>${unread ? '<button class="btn btn-outline btn-sm" data-readall>Mark all as read</button>' : ''}</header><div class="notification-list">${data.map((n) => `<article class="notification-card ${n.read ? '' : 'unread'}"><span class="notification-icon">${icon('bell', '', 18)}</span><div class="notification-content"><div class="notification-title-row"><h3>${esc(n.title)}</h3>${n.read ? '<span class="notification-state">Read</span>' : '<span class="notification-state new">New</span>'}</div><p>${esc(n.body)}</p><time>${fmtDate(n.created_at, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</time></div><div class="notification-actions">${n.link ? `<a class="btn btn-outline btn-sm" href="${esc(n.link)}">Open update</a>` : ''}${!n.read ? `<button class="btn btn-ghost btn-sm" data-notice-read="${n.id}">Mark read</button>` : ''}</div></article>`).join('')}</div></section>`;
     },
     async settings() {
       return `<div class="panel" style="max-width:640px"><h2>Profile</h2><form id="profForm" novalidate><div class="field"><label for="pName">Full name</label><input class="input" id="pName" value="${esc(me.full_name)}" required maxlength="120"></div><div class="field"><label for="pMail">Email</label><input class="input" id="pMail" value="${esc(me.email)}" disabled><span class="hint">Email changes are handled by support.</span></div><div class="row-2"><div class="field"><label for="pPhone">Phone</label><input class="input" id="pPhone" value="${esc(me.phone || '')}" maxlength="40"></div><div class="field"><label for="pCountry">Country</label><input class="input" id="pCountry" value="${esc(me.country || '')}" maxlength="80"></div></div><div class="field"><label for="pAddress">Address</label><input class="input" id="pAddress" value="${esc(me.address || '')}" maxlength="240" autocomplete="street-address"></div><button class="btn btn-dark" type="submit">Save changes</button></form></div>
@@ -197,7 +199,7 @@ if (!configured) {
   addEventListener('hashchange', route);
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-react-post],[data-book-event]'); if (!t) return;
+    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-react-post],[data-book-event]'); if (!t) return;
     if (t.dataset.tab) return void show(t.dataset.tab);
     if (t.dataset.go) return void show(t.dataset.go, t.dataset.course);
     if (t.dataset.lesson) return location.assign(`learn.html?lesson=${encodeURIComponent(t.dataset.lesson)}`);
@@ -206,6 +208,7 @@ if (!configured) {
     if (t.dataset.claim) { setBusy(t, true, 'Issuing'); const { error } = await supabase.rpc('claim_certificate', { p_course: t.dataset.claim }); if (error) { setBusy(t, false); return toast(error.message, 'err'); } toast('Certificate issued', 'ok'); return void show('certificates'); }
     if (t.dataset.cert) return openCert(t.dataset.cert);
     if (t.dataset.readall) { await supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false); return void show('notifications'); }
+    if (t.dataset.noticeRead) { const { error } = await supabase.from('notifications').update({ read: true }).eq('id', t.dataset.noticeRead).eq('user_id', me.id); if (error) return toast(error.message, 'err'); return void show('notifications'); }
     if (t.dataset.reactPost) { const { error } = await supabase.from('tutor_group_reactions').insert({ post_id: t.dataset.reactPost, user_id: me.id, reaction: t.dataset.reaction }); if (error && !/duplicate key/i.test(error.message)) return toast(error.message, 'err'); return void show('discussions'); }
     if (t.dataset.bookEvent) {
       setBusy(t, true, 'Booking'); const { data, error } = await supabase.rpc('book_event_ticket', { p_event: t.dataset.bookEvent });
