@@ -1,8 +1,9 @@
 ﻿import { supabase, configured, requireAuth, signOut, getProfile } from './supabase.js';
 import { getSetting } from './api.js';
-import { esc, money, fmtDate, icon, modal, toast, setBusy, empty, arr } from './ui.js';
+import { esc, safeLink, money, fmtDate, icon, modal, toast, setBusy, empty, arr } from './ui.js';
 import { CONFIG } from './config.js';
 import { joinGroupPresence, loadGroupMembers, renderGroupMembers, renderTypingIndicator } from './group-presence.js';
+import { mountMessaging, mountNotificationBell } from './messaging.js';
 
 const $ = (id) => document.getElementById(id);
 const TABS = [['overview', 'Overview', 'home'], ['courses', 'My courses', 'book'], ['lessons', 'Lessons', 'play'], ['assignments', 'Assignments', 'file'], ['career', 'Projects and CV', 'award'], ['certificates', 'Certificates', 'award'], ['id-card', 'Course ID cards', 'user'], ['messages', 'Messages', 'chat'], ['discussions', 'Course discussions', 'chat'], ['library', 'Library', 'stack'], ['events', 'Events', 'calendar'], ['tickets', 'My event tickets', 'calendar'], ['payments', 'Payment history', 'card'], ['notifications', 'Notifications', 'bell'], ['settings', 'Account settings', 'settings']];
@@ -26,7 +27,9 @@ if (!configured) {
   updateLiveClock(); setInterval(updateLiveClock, 30000);
   const cfg = (await getSetting('certificate')) || {};
   const S = { enrolls: null, prog: {}, lessons: {}, done: null, certCourses: [] };
+  let notificationFilter = 'all';
   let groupChatChannel = null;
+  let messagingCleanup = null;
   const groupPresenceChannels = new Map();
   const typingTimers = new Map();
   const loadEnrolls = async () => {
@@ -71,7 +74,8 @@ if (!configured) {
       }
       if (selectedCourse.status !== 'active' && !S.certCourses.includes(courseId)) return needCourse();
       if (!act.some((e) => e.course_id === courseId)) return needCourse();
-      const [{ data: ls }, { data: pr }, { data: mods }, { data: resources }] = await Promise.all([supabase.from('lessons').select('*').eq('course_id', courseId).order('position'), supabase.from('course_progress').select('lesson_id').eq('course_id', courseId).eq('user_id', me.id), supabase.from('course_modules').select('id,title,position').eq('course_id', courseId).order('position'), supabase.from('course_resources').select('*').eq('course_id', courseId).eq('published', true).order('created_at')]);
+      const [{ data: ls }, { data: pr }, { data: mods }, { data: resources }, { data: quizzes }, { data: quizResults }] = await Promise.all([supabase.from('lessons').select('*').eq('course_id', courseId).order('position'), supabase.from('course_progress').select('lesson_id').eq('course_id', courseId).eq('user_id', me.id), supabase.from('course_modules').select('id,title,position').eq('course_id', courseId).order('position'), supabase.from('course_resources').select('*').eq('course_id', courseId).eq('published', true).order('created_at'), supabase.from('exams').select('id,course_id,module_id,title,instructions,duration_min,pass_mark,is_final').eq('course_id', courseId).eq('published', true).eq('is_final', false), supabase.from('exam_results').select('exam_id,score,passed').eq('user_id', me.id)]);
+      S.exams = quizzes || [];
       const resourceLinks = await Promise.all((resources || []).map(async (resource) => {
         if (resource.object_path) {
           const { data } = await supabase.storage.from('course-materials').createSignedUrl(resource.object_path, 3600);
@@ -80,7 +84,15 @@ if (!configured) {
         return { ...resource, href: /^https?:\/\//i.test(resource.external_url || '') ? resource.external_url : '' };
       }));
       const done = new Set((pr || []).map((r) => r.lesson_id));
-      const group = (mods || []).map((m, index) => `<details class="acc" ${index === 0 ? 'open' : ''}><summary>Module ${m.position}: ${esc(m.title)}</summary><div class="acc-body">${(ls || []).filter((l) => l.module_id === m.id).map((l) => `<a class="lesson ${done.has(l.id) ? 'done' : ''}" href="learn.html?lesson=${l.id}" style="text-decoration:none;color:inherit"><span class="dot">${done.has(l.id) ? icon('check', '', 14) : ''}</span><div style="flex:1"><strong>${esc(l.title)}</strong>${l.duration_min ? `<div class="muted" style="font-size:.85rem">${l.duration_min} min</div>` : ''}</div>${icon('arrow-right', '', 18)}</a>`).join('') || '<p class="muted">Your tutor has not published sections for this module yet.</p>'}</div></details>`).join('');
+      const group = (mods || []).map((m, index) => {
+        const moduleLessons = (ls || []).filter((l) => l.module_id === m.id);
+        const moduleQuiz = (quizzes || []).find((q) => q.module_id === m.id);
+        const resultRows = moduleQuiz ? (quizResults || []).filter((r) => r.exam_id === moduleQuiz.id) : [];
+        const passed = resultRows.some((r) => r.passed);
+        const ready = moduleLessons.length > 0 && moduleLessons.every((l) => done.has(l.id));
+        const quizRow = moduleQuiz ? `<div class="list-item" style="margin-top:12px"><div class="grow"><h3>${esc(moduleQuiz.title)}</h3><p class="muted" style="font-size:.9rem">Module quiz · ${moduleQuiz.duration_min} min · pass mark ${moduleQuiz.pass_mark}%${resultRows.length ? ` · best score ${Math.max(...resultRows.map((r) => Number(r.score)))}%` : ''}</p></div><span class="badge ${passed ? 'ok' : resultRows.length ? 'warn' : ''}">${passed ? 'Passed' : resultRows.length ? 'Not passed yet' : ready ? 'Ready' : `${done.size && moduleLessons.length ? moduleLessons.filter((l) => done.has(l.id)).length : 0}/${moduleLessons.length} sections complete`}</span><button class="btn ${ready && !passed ? 'btn-lime' : 'btn-outline'} btn-sm" data-exam="${moduleQuiz.id}" ${ready && !passed ? '' : 'disabled'}>${passed ? 'Passed' : resultRows.length ? 'Retake quiz' : 'Start quiz'}</button></div>` : '';
+        return `<details class="acc" ${index === 0 ? 'open' : ''}><summary>Module ${m.position}: ${esc(m.title)}</summary><div class="acc-body">${moduleLessons.map((l) => `<a class="lesson ${done.has(l.id) ? 'done' : ''}" href="learn.html?lesson=${l.id}" style="text-decoration:none;color:inherit"><span class="dot">${done.has(l.id) ? icon('check', '', 14) : ''}</span><div style="flex:1"><strong>${esc(l.title)}</strong>${l.duration_min ? `<div class="muted" style="font-size:.85rem">${l.duration_min} min</div>` : ''}</div>${icon('arrow-right', '', 18)}</a>`).join('') || '<p class="muted">Your tutor has not published sections for this module yet.</p>'}${quizRow}</div></details>`;
+      }).join('');
       const resourceList = resourceLinks.length ? `<section class="block"><h3>Course resources</h3><div class="list">${resourceLinks.map((resource) => `<div class="list-item"><div class="grow"><h4>${esc(resource.title)}</h4><p class="muted">${esc(resource.description || resource.resource_type)}</p></div>${resource.href ? `<a class="btn btn-dark btn-sm" href="${esc(resource.href)}" target="_blank" rel="noopener noreferrer">Open ${icon('external', '', 16)}</a>` : '<span class="muted">File unavailable</span>'}</div>`).join('')}</div></section>` : '';
       return `<div class="tools"><label for="lsCourse" class="label">Course</label><select class="input" id="lsCourse" style="max-width:420px">${act.map((e) => `<option value="${e.course_id}" ${e.course_id === courseId ? 'selected' : ''}>${esc(e.course.title)}</option>`).join('')}</select></div><div class="panel">${bar(S.prog[courseId]?.percent || 0)}${group || empty('No lessons yet', 'Your tutor has not published lessons for this course.')}${resourceList}</div>`;
     },
@@ -160,8 +172,8 @@ if (!configured) {
     async notifications() {
       const { data } = await supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(50);
       if (!data?.length) return empty('Youâ€™re all caught up', 'Updates about your courses, projects and certificates will appear here.');
-      const unread = data.filter((n) => !n.read).length;
-      return `<section class="notifications-page"><header class="notifications-heading"><div><span class="eyebrow">YOUR UPDATES</span><h2>Notifications</h2><p>${unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You have read all your updates.'}</p></div>${unread ? '<button class="btn btn-outline btn-sm" data-readall>Mark all as read</button>' : ''}</header><div class="notification-list">${data.map((n) => `<article class="notification-card ${n.read ? '' : 'unread'}"><span class="notification-icon">${icon('bell', '', 18)}</span><div class="notification-content"><div class="notification-title-row"><h3>${esc(n.title)}</h3>${n.read ? '<span class="notification-state">Read</span>' : '<span class="notification-state new">New</span>'}</div><p>${esc(n.body)}</p><time>${fmtDate(n.created_at, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</time></div><div class="notification-actions">${n.link ? `<a class="btn btn-outline btn-sm" href="${esc(n.link)}">Open update</a>` : ''}${!n.read ? `<button class="btn btn-ghost btn-sm" data-notice-read="${n.id}">Mark read</button>` : ''}</div></article>`).join('')}</div></section>`;
+      const visible = notificationFilter === 'unread' ? data.filter((n) => !n.read) : data;
+      return `<section class="notifications-page"><header class="notifications-heading"><div><span class="eyebrow">YOUR UPDATES</span><h2>Notifications</h2><p>${unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You have read all your updates.'}</p></div>${unread ? '<button class="btn btn-outline btn-sm" data-readall>Mark all as read</button>' : ''}</header><div class="message-filters" role="group" aria-label="Notification filter"><button data-notice-filter="all" class="${notificationFilter === 'all' ? 'active' : ''}">All</button><button data-notice-filter="unread" class="${notificationFilter === 'unread' ? 'active' : ''}">Unread</button></div><div class="notification-list">${visible.map((n) => `<article class="notification-card ${n.read ? '' : 'unread'}"><span class="notification-icon">${icon('bell', '', 18)}</span><div class="notification-content"><div class="notification-title-row"><h3>${esc(n.title)}</h3>${n.read ? '<span class="notification-state">Read</span>' : '<span class="notification-state new">New</span>'}</div><p>${esc(n.body)}</p><time>${fmtDate(n.created_at, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</time></div><div class="notification-actions">${n.link ? `<a class="btn btn-outline btn-sm" href="${safeLink(n.link)}">Open update</a>` : ''}${!n.read ? `<button class="btn btn-ghost btn-sm" data-notice-read="${n.id}">Mark read</button>` : ''}</div></article>`).join('') || '<div class="messenger-empty">No notifications in this view.</div>'}</div></section>`;
     },
     async settings() {
       return `<div class="panel" style="max-width:640px"><h2>Profile</h2><form id="profForm" novalidate><div class="field"><label for="pName">Full name</label><input class="input" id="pName" value="${esc(me.full_name)}" required maxlength="120"></div><div class="field"><label for="pMail">Email</label><input class="input" id="pMail" value="${esc(me.email)}" disabled><span class="hint">Email changes are handled by support.</span></div><div class="row-2"><div class="field"><label for="pPhone">Phone</label><input class="input" id="pPhone" value="${esc(me.phone || '')}" maxlength="40"></div><div class="field"><label for="pCountry">Country</label><input class="input" id="pCountry" value="${esc(me.country || '')}" maxlength="80"></div></div><div class="field"><label for="pAddress">Address</label><input class="input" id="pAddress" value="${esc(me.address || '')}" maxlength="240" autocomplete="street-address"></div><button class="btn btn-dark" type="submit">Save changes</button></form></div>
@@ -169,7 +181,7 @@ if (!configured) {
     },
   };
 
-  V.messages = (...args) => V.discussions(...args);
+  V.messages = async () => '<section class="messenger"><div class="card skeleton" style="min-height:360px"></div></section>';
 
   V.career = async function career() {
     const en = await active(); if (!en.length) return needCourse();
@@ -198,21 +210,25 @@ if (!configured) {
     return `<div class="list">${cards.map(({ enrollment, card, error }) => { if (error || !card) return `<div class="alert err">${esc(enrollment.course.title)} card unavailable: ${esc(error?.message || '')}</div>`; const signature = cfg.signature_url ? `<image href="${xml(cfg.signature_url)}" x="215" y="704" width="170" height="48" preserveAspectRatio="xMidYMid meet"/>` : ''; const issued = fmtDate(card.issued_at, { day: 'numeric', month: 'short', year: 'numeric' }); const logo = new URL('assets/images/logo-mark.svg', location.href).href; const avatar = profile.avatar_url ? `<image href="${xml(profile.avatar_url)}" x="190" y="150" width="220" height="220" preserveAspectRatio="xMidYMid slice"/>` : `<circle cx="300" cy="260" r="110" fill="#e8efdc"/><text x="300" y="272" text-anchor="middle" font-family="Arial" font-size="32" font-weight="700" fill="#17212b">${xml((profile.full_name || 'S').slice(0, 1).toUpperCase())}</text>`; const org = xml(cfg.organisation || 'Courssins Technology Institute'); const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900"><defs><clipPath id="photo"><circle cx="300" cy="260" r="110"/></clipPath><linearGradient id="bg" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#f4f8eb"/></linearGradient></defs><rect width="600" height="900" rx="36" fill="url(#bg)"/><path d="M36 0h528a36 36 0 0 1 36 36v145H0V36A36 36 0 0 1 36 0" fill="#17212b"/><image href="${xml(logo)}" x="42" y="38" width="58" height="58"/><text x="118" y="62" fill="#fff" font-family="Arial" font-size="21" font-weight="700">${org}</text><text x="118" y="90" fill="#c5f82a" font-family="Arial" font-size="12" letter-spacing="2">STUDENT IDENTITY CARD</text><circle cx="300" cy="260" r="120" fill="#c5f82a"/>${avatar.startsWith('<image') ? `<image href="${xml(profile.avatar_url)}" x="190" y="150" width="220" height="220" preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)"/>` : avatar}<text x="300" y="410" text-anchor="middle" fill="#65716a" font-family="Arial" font-size="17" letter-spacing="2">STUDENT · ${xml(student.student_no)}</text><text x="300" y="458" text-anchor="middle" fill="#17212b" font-family="Arial" font-size="34" font-weight="700">${xml(profile.full_name || 'Student')}</text><text x="300" y="492" text-anchor="middle" fill="#5e6b74" font-family="Arial" font-size="16">${xml(profile.email)}</text><rect x="52" y="530" width="496" height="2" fill="#dce4d5"/><text x="300" y="574" text-anchor="middle" fill="#68736b" font-family="Arial" font-size="13" letter-spacing="1.5">ENROLLED COURSE</text><text x="300" y="606" text-anchor="middle" fill="#17212b" font-family="Arial" font-size="21" font-weight="700">${xml(enrollment.course.title)}</text><text x="300" y="647" text-anchor="middle" fill="#5e6b74" font-family="Arial" font-size="15">${xml(profile.phone || '')}</text><text x="300" y="674" text-anchor="middle" fill="#5e6b74" font-family="Arial" font-size="15">Card ${xml(card.card_number)} · Issued ${xml(issued)}</text>${signature}<path d="M215 758h170" stroke="#17212b"/><text x="300" y="783" text-anchor="middle" fill="#17212b" font-family="Arial" font-size="14">${xml(cfg.signatory_name || 'Abdulmannan Sulayman')}</text><text x="300" y="805" text-anchor="middle" fill="#5e6b74" font-family="Arial" font-size="12">${xml(cfg.signatory || 'Director of Studies')}</text><rect x="0" y="866" width="600" height="34" fill="${card.status === 'valid' ? '#c5f82a' : '#ef7777'}"/><text x="300" y="889" text-anchor="middle" fill="#17212b" font-family="Arial" font-size="13" font-weight="700" letter-spacing="2">${xml(card.status.toUpperCase())}</text></svg>`; const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })); return `<div class="panel"><h3>${esc(enrollment.course.title)}</h3><p class="muted">Card status: ${esc(card.status)}</p><img src="${url}" alt="${esc(enrollment.course.title)} student ID card" style="display:block;width:100%;max-width:420px;margin:14px auto;border-radius:18px;border:1px solid var(--line);box-shadow:0 18px 44px rgba(23,33,43,.14)"><a class="btn btn-lime" href="${url}" download="${esc(card.card_number)}.svg">${icon('download', '', 16)} Download course ID card</a></div>`; }).join('')}</div>`;
   };
 
-  async function show(tab, arg) {
+  async function show(tab, arg, requestedConversation = null) {
+    if (messagingCleanup) { await messagingCleanup(); messagingCleanup = null; }
     if (!V[tab]) tab = 'overview';
     $('sideNav').querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === tab));
     $('panelTitle').textContent = TABS.find((t) => t[0] === tab)[1]; toggleSide(false); busyPanel();
-    try { $('panel').innerHTML = await V[tab](arg); } catch (e) { console.error(e); $('panel').innerHTML = empty('Something went wrong', 'We could not load this section. Please refresh and try again.'); }
+    try {
+      $('panel').innerHTML = await V[tab](arg);
+      if (tab === 'messages') messagingCleanup = await mountMessaging({ root: $('panel'), supabase, me, requestedId: requestedConversation });
+    } catch (e) { console.error(e); $('panel').innerHTML = empty('Something went wrong', 'We could not load this section. Please refresh and try again.'); }
     if (groupChatChannel) { supabase.removeChannel(groupChatChannel); groupChatChannel = null; }
     groupPresenceChannels.forEach((presence) => { presence.disposed = true; clearTimeout(presence.typingTimer); presence.connection.stop(); }); groupPresenceChannels.clear(); typingTimers.clear();
-    if (tab === 'messages' || tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => { const stream = $(`chat-${form.dataset.groupChat}`); if (stream) stream.scrollTop = stream.scrollHeight; });
-    if (tab === 'messages' || tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => {
+    if (tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => { const stream = $(`chat-${form.dataset.groupChat}`); if (stream) stream.scrollTop = stream.scrollHeight; });
+    if (tab === 'discussions') $('panel').querySelectorAll('[data-group-chat]').forEach((form) => {
       const groupId = form.dataset.groupChat, state = { members: [], presence: {}, connection: null, typingTimer: null };
       const updatePresence = (presence) => { if (state.disposed) return; const wasOnline = Object.values(state.presence).flat().filter((member) => member.user_id).map((member) => member.user_id).sort().join(','); const isOnline = Object.values(presence).flat().filter((member) => member.user_id).map((member) => member.user_id).sort().join(','); state.presence = presence; renderTypingIndicator($(`typing-${groupId}`), presence, me); renderGroupMembers(state.members, presence, $(`members-${groupId}`), (total, online) => { const counter = document.querySelector(`[data-group-count="${groupId}"]`); if (counter) counter.textContent = `${online} online · ${total} members`; }); const menu = document.querySelector(`[data-group-menu="${groupId}"]`); if (wasOnline !== isOnline && menu && !menu.hidden) loadGroupMembers(supabase, groupId).then(({ members }) => { if (state.disposed || groupPresenceChannels.get(groupId) !== state || !members) return; state.members = members; renderGroupMembers(members, state.presence, $(`members-${groupId}`)); }); };
       state.connection = joinGroupPresence(supabase, groupId, me, updatePresence); groupPresenceChannels.set(groupId, state);
       loadGroupMembers(supabase, groupId).then(({ members, error }) => { if (groupPresenceChannels.get(groupId) !== state) return; if (error) { const target = $(`members-${groupId}`); if (target) target.innerHTML = `<li class="muted">${esc(error.message)}</li>`; return; } state.members = members; updatePresence(state.presence); });
     });
-    if (tab === 'messages' || tab === 'discussions') groupChatChannel = supabase.channel(`course-chat-${me.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tutor_group_posts' }, async ({ new: post }) => {
+    if (tab === 'discussions') groupChatChannel = supabase.channel(`course-chat-${me.id}`, { config: { private: true } }).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tutor_group_posts' }, async ({ new: post }) => {
       const stream = $(`chat-${post.group_id}`); if (!stream || stream.querySelector(`[data-chat-message="${post.id}"]`)) return;
       const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 100;
       const authorName = post.author_id === me.id ? 'You' : post.author_name || 'Course member';
@@ -221,12 +237,12 @@ if (!configured) {
       stream.querySelector('.muted')?.remove(); stream.append(bubble); if (nearBottom) stream.scrollTop = stream.scrollHeight;
     }).subscribe();
     $('panel').querySelector('.bar i, .ring-progress') && requestAnimationFrame(() => $('panel').querySelectorAll('.bar i').forEach((i) => { const w = i.style.width; i.style.width = '0'; requestAnimationFrame(() => (i.style.width = w)); }));
-    if (location.hash.slice(1).split('?')[0] !== tab) history.replaceState(null, '', `#${tab}`);
+    if (location.hash.slice(1).split('?')[0] !== tab) history.replaceState(null, '', `#${tab}${tab === 'messages' && requestedConversation ? `?conversation=${encodeURIComponent(requestedConversation)}` : ''}`);
   }
-  const route = () => show(location.hash.slice(1).split('?')[0] || 'overview');
+  const route = () => { const parts = location.hash.slice(1).split('?'); return show(parts[0] || 'overview', null, new URLSearchParams(parts[1] || '').get('conversation')); };
   addEventListener('hashchange', route);
   let overviewRefresh = null;
-  const studentLiveChannel = supabase.channel(`student-dashboard-live-${me.id}`);
+  const studentLiveChannel = supabase.channel(`student-dashboard-live-${me.id}`, { config: { private: true } });
   ['enrollments','course_progress','assignment_submissions','exam_results','certificates','notifications'].forEach((table) => studentLiveChannel.on('postgres_changes', { event: '*', schema: 'public', table }, ({ table: changedTable }) => {
     const currentTab = location.hash.slice(1).split('?')[0] || 'overview';
     if (currentTab === 'overview' && !overviewRefresh) overviewRefresh = setTimeout(() => { overviewRefresh = null; refreshAll(); show('overview'); }, 450);
@@ -238,7 +254,8 @@ if (!configured) {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-react-post],[data-book-event],[data-group-info],[data-group-info-close]'); if (!t) return;
+    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-notice-filter],[data-react-post],[data-book-event],[data-group-info],[data-group-info-close]'); if (!t) return;
+    if (t.dataset.noticeFilter) { notificationFilter = t.dataset.noticeFilter; return void show('notifications'); }
     if (t.dataset.groupInfo || t.dataset.groupInfoClose) {
       const groupId = t.dataset.groupInfo || t.dataset.groupInfoClose, menu = document.querySelector(`[data-group-menu="${groupId}"]`), state = groupPresenceChannels.get(groupId); if (!menu || !state) return;
       const open = t.dataset.groupInfo ? menu.hidden : false; menu.hidden = !open;
@@ -377,6 +394,7 @@ if (!configured) {
   });
   // unread badge
   supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).eq('read', false).then(({ count }) => { const b = document.querySelector('[data-badge="notifications"]'); if (count) { b.hidden = false; b.textContent = count; } });
+  mountNotificationBell({ supabase, me });
   route();
 }
 

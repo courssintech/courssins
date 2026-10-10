@@ -2,6 +2,7 @@ import { icon, hasIcon } from './icons.js';
 export { icon };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const safeLink = (value) => /^(https?:\/\/|\/(?!\/)|[a-z0-9_.-]+\.html(?:[?#]|$))/i.test(String(value || '')) ? esc(value) : '#';
 export const money = (n, cur = 'NGN') => (Number(n) === 0 ? 'Free' : new Intl.NumberFormat('en-NG', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(n));
 export const fmtDate = (d, opts = { day: 'numeric', month: 'short', year: 'numeric' }) => (d ? new Date(d).toLocaleDateString('en-GB', opts) : '');
 export const slugify = (s) => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');

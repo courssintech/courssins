@@ -105,7 +105,11 @@ if (!configured) {
 
       async function startQuiz(quiz, nextLesson) {
         const { data: attempt, error: beginError } = await supabase.rpc('begin_exam', { p_exam: quiz.id });
-        if (beginError || !attempt?.questions?.length) return toast(beginError?.message || 'This quiz is not ready yet.', 'err');
+        if (beginError || !attempt?.questions?.length) {
+          const reason = beginError?.message || 'This quiz has no questions yet. Ask your tutor to publish its questions, then try again.';
+          root.innerHTML = `<div class="panel"><a href="learn.html?lesson=${lesson.id}">← Return to ${esc(lesson.title)}</a><h1 style="margin:14px 0">${esc(quiz.title)}</h1><div class="alert err">${esc(reason)}</div><p class="muted">Your module progress is saved. You can open this quiz again from your student board.</p><a class="btn btn-dark" href="dashboard.html#lessons">Back to my lessons</a></div>`;
+          return;
+        }
         const questions = attempt.questions;
         const expiresAt = new Date(attempt.expires_at).getTime();
         const body = `<p class="muted">${quiz.is_final ? 'Final course quiz' : 'Module quiz'} · ${attempt.duration_min || quiz.duration_min || 13} minutes</p><p class="badge warn" id="quizTimer" aria-live="polite"></p><form id="quizForm">${questions.map((question, index) => `<fieldset class="q" style="border:1px solid var(--line)"><legend style="font-weight:700;padding:0 6px">${index + 1}. ${esc(question.question)}</legend>${arr(question.options).map((option, choice) => `<label class="opt"><input type="radio" name="q_${question.id}" value="${choice}"><span>${esc(option)}</span></label>`).join('')}</fieldset>`).join('')}</form><div id="quizResult"></div>`;

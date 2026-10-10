@@ -1,7 +1,8 @@
 ﻿import { supabase, configured, requireAuth, signOut } from './supabase.js';
 import { getSettings } from './api.js';
-import { esc, money, fmtDate, icon, modal, toast, setBusy, empty, slugify, sanitizeHTML, sanitizeCSS, arr } from './ui.js';
+import { esc, safeLink, money, fmtDate, icon, modal, toast, setBusy, empty, slugify, sanitizeHTML, sanitizeCSS, arr } from './ui.js';
 import { joinGroupPresence, loadGroupMembers, renderGroupMembers, renderTypingIndicator } from './group-presence.js';
+import { mountMessaging, mountNotificationBell } from './messaging.js';
 
 const $ = (id) => document.getElementById(id);
 const ICONS = ['design', 'code', 'server', 'stack', 'ux', 'assist', 'pm', 'data', 'shield', 'heart', 'care'];
@@ -126,7 +127,8 @@ if (!configured) {
   const links = [`<button class="side-link" data-v="dash">${icon('grid', '', 18)}Overview</button>`];
   groups.forEach((g) => { links.push(`<div class="side-label">${g}</div>`); if (g === 'Learning') links.push(`<button class="side-link" data-v="builder">${icon('stack', '', 18)}Course builder</button>`); allowed.filter(([, e]) => e.g === g).forEach(([k, e]) => links.push(`<button class="side-link" data-v="${k}">${icon(e.ic, '', 18)}${e.t}</button>`)); });
   if (me.role === T) links.push(`<button class="side-link" data-v="tutor-profile">${icon('user', '', 18)}My tutor profile</button>`);
-  links.push(`<button class="side-link" data-v="staff-inbox">${icon('chat', '', 18)}Staff inbox</button>`);
+  links.push(`<button class="side-link" data-v="staff-inbox">${icon('chat', '', 18)}<span>Messages</span><span class="badge" data-badge="staff-inbox" hidden style="margin-left:auto"></span></button>`);
+  links.push(`<button class="side-link" data-v="my-notifications">${icon('bell', '', 18)}My notifications</button>`);
   if (myRank >= 2) links.push(`<button class="side-link" data-v="student-id-directory">${icon('user', '', 18)}Student ID cards</button>`);
   if (me.role === T) links.push(`<button class="side-link" data-v="tutor-groups">${icon('users', '', 18)}Course discussions</button>`);
   links.push(`<button class="side-link" data-v="staff-id">${icon('user', '', 18)}My staff ID</button>`);
@@ -143,7 +145,10 @@ if (!configured) {
   let tutorTypingTimer = null;
   let activeTutorGroupId = null;
   let activeAdminView = 'dash';
+  let messagingCleanup = null;
+  mountNotificationBell({ supabase, me });
   let adminOverviewRefresh = null;
+  let staffNotificationFilter = 'all';
   let builderCourseId = null;
   let assignedCourseIdsCache;
   async function assignedCourseIds() {
@@ -457,6 +462,8 @@ if (!configured) {
   }
 
   async function staffInbox(selectedId = null) {
+    messagingCleanup = await mountMessaging({ root: $('panel'), supabase, me, requestedId: selectedId || new URLSearchParams(location.hash.split('?')[1] || '').get('conversation') });
+    return;
     const [{ data: messages, error }, { data: tutors }] = await Promise.all([
       supabase.from('staff_messages').select('*').order('created_at', { ascending: true }).limit(300),
       me.role === T ? Promise.resolve({ data: [] }) : supabase.from('profiles').select('id,full_name,email,role').in('role', ['tutor', 'admin', 'super_admin']).eq('is_active', true).order('full_name'),
@@ -507,7 +514,7 @@ if (!configured) {
     $('groupPostBody').addEventListener('input', () => { if ($('groupPostType').value !== 'message' || !$('groupPostBody').value.trim()) { clearTimeout(tutorTypingTimer); tutorGroupPresence.trackTyping(false); return; } clearTimeout(tutorTypingTimer); tutorGroupPresence.trackTyping(true); tutorTypingTimer = setTimeout(() => tutorGroupPresence?.trackTyping(false), 1300); });
     $('groupPostBody').addEventListener('focusout', () => { clearTimeout(tutorTypingTimer); tutorGroupPresence?.trackTyping(false); });
     $('groupPostType').addEventListener('change', () => { if ($('groupPostType').value !== 'message') { clearTimeout(tutorTypingTimer); tutorGroupPresence?.trackTyping(false); } });
-    tutorGroupChannel = supabase.channel(`tutor-course-chat-${group.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tutor_group_posts', filter: `group_id=eq.${group.id}` }, async ({ new: post }) => {
+    tutorGroupChannel = supabase.channel(`tutor-course-chat-${group.id}`, { config: { private: true } }).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tutor_group_posts', filter: `group_id=eq.${group.id}` }, async ({ new: post }) => {
       if (post.group_id !== group.id) return; const stream = $('tutorChatStream'); if (!stream || stream.querySelector(`[data-chat-message="${post.id}"]`)) return;
       const nearBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 100;
       const bubble = document.createElement('article'); bubble.className = `chat-bubble discussion-bubble ${post.author_id === me.id && post.post_type === 'message' ? 'mine' : ''}`; bubble.dataset.chatMessage = post.id;
@@ -819,22 +826,36 @@ if (!configured) {
     });
   }
 
+  async function myNotifications() {
+    const { data, error } = await supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(100);
+    if (error) return $('panel').innerHTML = empty('Notifications unavailable', error.message);
+    const unread = (data || []).filter((row) => !row.read);
+    const visible = staffNotificationFilter === 'unread' ? (data || []).filter((row) => !row.read) : data || [];
+    $('panel').innerHTML = `<section class="notifications-page"><header class="notifications-heading"><div><span class="eyebrow">YOUR UPDATES</span><h2>Notifications</h2><p>${unread.length ? `${unread.length} unread updates` : 'You have read all your updates.'}</p></div>${unread.length ? '<button class="btn btn-outline btn-sm" data-staff-read-all>Mark all as read</button>' : ''}</header><div class="message-filters" role="group" aria-label="Notification filter"><button data-staff-notice-filter="all" class="${staffNotificationFilter === 'all' ? 'active' : ''}">All</button><button data-staff-notice-filter="unread" class="${staffNotificationFilter === 'unread' ? 'active' : ''}">Unread</button></div><div class="notification-list">${visible.map((row) => `<article class="notification-card ${row.read ? '' : 'unread'}"><span class="notification-icon">${icon('bell','',18)}</span><div class="notification-content"><div class="notification-title-row"><h3>${esc(row.title)}</h3><span class="notification-state ${row.read ? '' : 'new'}">${row.read ? 'Read' : 'New'}</span></div><p>${esc(row.body || '')}</p><time>${fmtDate(row.created_at,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</time></div><div class="notification-actions">${row.link ? `<a class="btn btn-outline btn-sm" href="${safeLink(row.link)}">Open</a>` : ''}${!row.read ? `<button class="btn btn-ghost btn-sm" data-staff-read="${row.id}">Mark read</button>` : ''}</div></article>`).join('') || '<div class="empty"><h3>No notifications in this view</h3><p>Important course and message updates will appear here.</p></div>'}</div></section>`;
+    $('panel').querySelectorAll('[data-staff-notice-filter]').forEach((button) => button.addEventListener('click', () => { staffNotificationFilter = button.dataset.staffNoticeFilter; myNotifications(); }));
+    $('panel').querySelector('[data-staff-read-all]')?.addEventListener('click', async () => { const { error: updateError } = await supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false); if (updateError) toast(updateError.message,'err'); else myNotifications(); });
+    $('panel').querySelectorAll('[data-staff-read]').forEach((button) => button.addEventListener('click', async () => { const { error: updateError } = await supabase.from('notifications').update({ read: true }).eq('id',button.dataset.staffRead).eq('user_id',me.id); if (updateError) toast(updateError.message,'err'); else myNotifications(); }));
+  }
   async function go(v) {
+    if (messagingCleanup) { await messagingCleanup(); messagingCleanup = null; }
+    const hashParts = String(v || '').split('?'); const requestedConversation = new URLSearchParams(hashParts[1] || '').get('conversation');
+    if (hashParts[0] === 'messages') v = 'staff-inbox';
     if (tutorGroupChannel && v !== 'tutor-groups') { supabase.removeChannel(tutorGroupChannel); tutorGroupChannel = null; }
     if (tutorGroupPresence && v !== 'tutor-groups') { clearTimeout(tutorTypingTimer); tutorGroupPresence.stop(); tutorGroupPresence = null; activeTutorGroupId = null; }
-    v = v || 'dash'; const profileView = v === 'tutor-profile' && me.role === T; const cardView = v === 'staff-id'; const builderView = v === 'builder' && myRank >= 1; const inboxView = v === 'staff-inbox'; const groupsView = v === 'tutor-groups' && me.role === T; const studentCardsView = v === 'student-id-directory' && myRank >= 2; if (v !== 'dash' && v !== 'site' && !profileView && !cardView && !builderView && !inboxView && !groupsView && !studentCardsView && !allowed.find(([k]) => k === v)) v = 'dash'; if (v === 'site' && myRank < 3) v = 'dash';
+    v = v || 'dash'; const profileView = v === 'tutor-profile' && me.role === T; const cardView = v === 'staff-id'; const builderView = v === 'builder' && myRank >= 1; const inboxView = v === 'staff-inbox'; const notificationsView = v === 'my-notifications'; const groupsView = v === 'tutor-groups' && me.role === T; const studentCardsView = v === 'student-id-directory' && myRank >= 2; if (v !== 'dash' && v !== 'site' && !profileView && !cardView && !builderView && !inboxView && !notificationsView && !groupsView && !studentCardsView && !allowed.find(([k]) => k === v)) v = 'dash'; if (v === 'site' && myRank < 3) v = 'dash';
     activeAdminView = v;
     document.querySelectorAll('[data-v]').forEach((b) => b.classList?.contains('side-link') && b.setAttribute('aria-current', b.dataset.v === v));
-    $('panelTitle').textContent = v === 'dash' ? 'Overview' : v === 'site' ? 'Website content' : profileView ? 'My tutor profile' : cardView ? 'My staff ID' : builderView ? 'Course builder' : inboxView ? 'Staff inbox' : groupsView ? 'Course discussions' : studentCardsView ? 'Student ID cards' : E[v].t; toggle(false);
-    history.replaceState(null, '', `#${v}`);
-    try { await (v === 'dash' ? dash() : v === 'site' ? site() : profileView ? tutorProfile() : cardView ? staffIdCard() : builderView ? courseBuilder() : inboxView ? staffInbox() : groupsView ? tutorGroups(null) : studentCardsView ? studentIdDirectory() : list(v)); } catch (er) { console.error(er); $('panel').innerHTML = empty('Something went wrong', 'Refresh the page and try again.'); }
+    $('panelTitle').textContent = v === 'dash' ? 'Overview' : v === 'site' ? 'Website content' : profileView ? 'My tutor profile' : cardView ? 'My staff ID' : builderView ? 'Course builder' : inboxView ? 'Messages' : notificationsView ? 'My notifications' : groupsView ? 'Course discussions' : studentCardsView ? 'Student ID cards' : E[v].t; toggle(false);
+    history.replaceState(null, '', `#${v}${inboxView && requestedConversation ? `?conversation=${encodeURIComponent(requestedConversation)}` : ''}`);
+    try { await (v === 'dash' ? dash() : v === 'site' ? site() : profileView ? tutorProfile() : cardView ? staffIdCard() : builderView ? courseBuilder() : inboxView ? staffInbox(requestedConversation) : notificationsView ? myNotifications() : groupsView ? tutorGroups(null) : studentCardsView ? studentIdDirectory() : list(v)); } catch (er) { console.error(er); $('panel').innerHTML = empty('Something went wrong', 'Refresh the page and try again.'); }
   }
   document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-v]'); if (b) go(b.dataset.v); });
   addEventListener('hashchange', () => go(location.hash.slice(1)));
   go(location.hash.slice(1));
-  const adminLiveChannel = supabase.channel(`admin-dashboard-live-${me.id}`);
+  const adminLiveChannel = supabase.channel(`admin-dashboard-live-${me.id}`, { config: { private: true } });
   ['profiles','courses','enrollments','payments','assignment_submissions','notifications','contact_messages','certificates','tutor_group_posts','course_discussions'].forEach((table) => adminLiveChannel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
     if (activeAdminView === 'dash' && !adminOverviewRefresh) adminOverviewRefresh = setTimeout(() => { adminOverviewRefresh = null; go('dash'); }, 450);
+    if (table === 'notifications' && activeAdminView === 'my-notifications') myNotifications();
   }));
   adminLiveChannel.subscribe((status) => {
     if (status === 'SUBSCRIBED') setLiveStatus('is-live', 'Live');
