@@ -18,7 +18,7 @@ courssins/
   supabase/
     schema.sql                 tables, RLS policies, RPC functions, storage bucket
     seed.sql                   sample courses, tutors, articles, library, settings, terms/privacy
-    migrations/                 additive upgrades for tutor assignments, private resources, lesson pages, quizzes, discussions, ads and staff ID cards
+    migrations/                 additive upgrades for tutor assignments, private resources, lesson pages, quizzes, discussions, ads, staff ID cards and the shared real-time inbox
     functions/admin-users, resend-notifications       account management and email alerts
     functions/paystack-initialize, paystack-webhook   payment gateway (Edge Functions)
   scripts/  generate-seed.mjs  build-pages.py  make-images.py   (optional regeneration helpers)
@@ -27,7 +27,8 @@ courssins/
 ## 1. Set up Supabase (about 10 minutes)
 1. Create a project at supabase.com.
 2. **SQL Editor**: on a fresh, dedicated project, paste and run `supabase/schema.sql`, then run every file in `supabase/migrations/` in filename order, and finally run `supabase/seed.sql`. Do not run the baseline schema on a shared or established database: it recreates policies across the `public` schema.
-  For an existing Courssins installation, back up the database, run the files in `supabase/migrations/` in filename order, then run `supabase/seed.sql` to refresh the legal pages and supported defaults.
+  For an existing Courssins installation, back up the database, run the files in `supabase/migrations/` in filename order (including `20261010000100_realtime_direct_messaging.sql` for the shared inbox, private attachments, and message notifications), then run `supabase/seed.sql` to refresh the legal pages and supported defaults.
+  In Supabase **Realtime settings**, turn off **Allow public access** so the private, membership-authorized dashboard and conversation channels are enforced. In **Data API settings**, ensure the `public` schema and the new messaging tables and RPC functions are exposed to authenticated clients; the migration grants only the privileges required by their RLS policies.
 3. Copy `.env.example` to `.env` and fill in your real values. The repo uses `scripts/link-env.mjs` to generate `public/assets/js/config.js` automatically from those environment variables before Vercel deploys the site. These two values are meant to be public. **Never** paste the `service_role` key anywhere in `public/`.
 4. **Authentication > URL Configuration**: set Site URL to `https://courssin.com.ng` and add `https://courssin.com.ng/login.html` to Redirect URLs (needed for email confirmation and password reset). Configure an SMTP provider for production email volume. Set the sender/support address to `support.courssintech@gmail.com` where appropriate.
 5. Sign up on the website, then make yourself Super Admin by running this in the SQL Editor:
