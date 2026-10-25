@@ -122,7 +122,7 @@ if (!configured) {
   const updateLiveClock = () => { liveStatus.querySelector('time').textContent = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()); };
   updateLiveClock(); setInterval(updateLiveClock, 30000);
   const myRank = rank[me.role];
-  const allowed = Object.entries(E).filter(([key, e]) => myRank >= need[e.min] && !(me.role === T && key === 'modules'));
+  const allowed = Object.entries(E).filter(([, e]) => myRank >= need[e.min]);
   const groups = [...new Set(allowed.map(([, e]) => e.g))];
   const links = [`<button class="side-link" data-v="dash">${icon('grid', '', 18)}Overview</button>`];
   groups.forEach((g) => { links.push(`<div class="side-label">${g}</div>`); if (g === 'Learning') links.push(`<button class="side-link" data-v="builder">${icon('stack', '', 18)}Course builder</button>`); allowed.filter(([, e]) => e.g === g).forEach(([k, e]) => links.push(`<button class="side-link" data-v="${k}">${icon(e.ic, '', 18)}${e.t}</button>`)); });
@@ -296,7 +296,7 @@ if (!configured) {
   }
 
   const toLocal = (d) => (d ? new Date(new Date(d).getTime() - new Date(d).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
-  async function form(key, row) {
+  async function form(key, row, onSaved = null) {
     const e = E[key]; const editing = !!row;
     const refOpts = {}; await Promise.all(e.fields.filter((f) => ['ref', 'refs'].includes(f.type)).map(async (f) => { refOpts[f.k] = await refMap(...f.ref); }));
     const html = e.fields.map((f) => {
@@ -436,7 +436,7 @@ if (!configured) {
           if (removeError) { setBusy(ev.currentTarget, false); toast(`Course saved; some former tutor assignments remain: ${removeError.message}`, 'err'); m.close(); list(key); return; }
         }
       }
-      toast('Saved', 'ok'); m.close(); Object.keys(refCache).forEach((k) => delete refCache[k]); list(key);
+      toast('Saved', 'ok'); m.close(); Object.keys(refCache).forEach((k) => delete refCache[k]); onSaved ? onSaved() : list(key);
     });
   }
 
@@ -708,27 +708,90 @@ if (!configured) {
     });
   }
 
+  async function editModuleQuiz(module, exam) {
+    const isFinal = Boolean(exam?.is_final) || !module;
+    const questionCount = isFinal ? 15 : 7;
+    let activeExam = exam;
+    if (!activeExam) {
+      const { data, error } = await supabase.from('exams').insert({ course_id: builderCourseId, module_id: isFinal ? null : module.id, is_final: isFinal, title: isFinal ? 'Final course quiz' : `Module ${module.position}: ${module.title} Quiz`, instructions: '', duration_min: 13, pass_mark: 50, published: false }).select('*').single();
+      if (error) return toast(error.message, 'err');
+      activeExam = data;
+    }
+    const { data: loadedQuestions, error: loadError } = await supabase.from('exam_questions').select('*').eq('exam_id', activeExam.id).order('position');
+    if (loadError) return toast(loadError.message, 'err');
+    const questions = [...(loadedQuestions || [])];
+    while (questions.length < questionCount) questions.push({ exam_id: activeExam.id, question: '', options: ['', '', '', ''], correct_index: 0, position: questions.length + 1 });
+    const quizKind = isFinal ? 'final course quiz' : `Module ${module.position} quiz`;
+    const body = `<form id="moduleQuizForm"><div class="row-2"><div class="field"><label for="mqTitle">Quiz title</label><input class="input" id="mqTitle" maxlength="160" required value="${esc(activeExam.title)}"></div><div class="field"><label for="mqDuration">Time limit (minutes)</label><input class="input" id="mqDuration" type="number" min="1" max="180" value="${Number(activeExam.duration_min) || 13}"></div></div><div class="field"><label for="mqInstructions">Instructions</label><textarea class="input" id="mqInstructions" maxlength="2000">${esc(activeExam.instructions || '')}</textarea></div><div class="field"><label for="mqPass">Pass mark (%)</label><input class="input" id="mqPass" type="number" min="50" max="100" value="${Math.max(50, Number(activeExam.pass_mark) || 50)}"></div><p class="hint">${isFinal ? 'Final quizzes need exactly 15 questions.' : 'Module quizzes need exactly seven questions.'} Add four answer choices for each and select the correct answer number (1–4).</p>${questions.slice(0, questionCount).map((q, index) => `<section class="panel" data-question="${q.id || ''}" style="margin-block:14px;padding:16px"><h3>Question ${index + 1}</h3><div class="field"><label>Question</label><textarea class="input mq-question" maxlength="2000" required>${esc(q.question || '')}</textarea></div><div class="field"><label>Answer choices, one per line</label><textarea class="input mq-options" rows="4" required>${esc(arr(q.options).join('\n'))}</textarea></div><div class="field"><label>Correct answer number (1–4)</label><input class="input mq-correct" type="number" min="1" max="4" value="${Number(q.correct_index ?? 0) + 1}" required></div></section>`).join('')}<label class="check"><input id="mqPublish" type="checkbox" ${activeExam.published ? 'checked' : ''}> Publish quiz for enrolled students</label><p class="hint">${isFinal ? 'Published final quizzes appear in students’ quiz list after their course modules are complete.' : 'Published quizzes appear for enrolled students after the module sections are complete.'}</p></form>`;
+    const m = modal({ title: quizKind, wide: true, body, actions: '<button class="btn btn-lime" id="saveModuleQuiz">Save quiz</button>' });
+    m.el.querySelector('#saveModuleQuiz').addEventListener('click', async (event) => {
+      const cards = [...m.el.querySelectorAll('[data-question]')];
+      const prepared = cards.map((card, index) => ({ id: card.dataset.question || undefined, exam_id: activeExam.id, question: card.querySelector('.mq-question').value.trim(), options: card.querySelector('.mq-options').value.split('\n').map((value) => value.trim()).filter(Boolean), correct_index: Number(card.querySelector('.mq-correct').value) - 1, position: index + 1 }));
+      const validQuestions = prepared.every((q) => q.question && q.options.length === 4 && q.options.every(Boolean) && q.correct_index >= 0 && q.correct_index < 4);
+      const publish = m.el.querySelector('#mqPublish').checked;
+      if (!m.el.querySelector('#mqTitle').value.trim()) return toast('Enter a quiz title.', 'err');
+      if (publish && (!validQuestions || prepared.length !== questionCount)) return toast(`To publish, complete all ${questionCount} questions with four choices and one correct answer each.`, 'err');
+      if (prepared.some((q) => q.question || q.options.some(Boolean)) && !validQuestions) return toast('Each started question needs text, four choices and a valid correct answer.', 'err');
+      setBusy(event.currentTarget, true, 'Saving');
+      const existing = prepared.filter((q) => q.id), added = prepared.filter((q) => !q.id && q.question);
+      if (existing.length) {
+        const { error } = await supabase.from('exam_questions').upsert(existing, { onConflict: 'id' });
+        if (error) { setBusy(event.currentTarget, false); return toast(error.message, 'err'); }
+      }
+      if (added.length) {
+        const { error } = await supabase.from('exam_questions').insert(added);
+        if (error) { setBusy(event.currentTarget, false); return toast(error.message, 'err'); }
+      }
+      const blankIds = prepared.filter((q) => q.id && !q.question).map((q) => q.id);
+      if (blankIds.length) { const { error } = await supabase.from('exam_questions').delete().in('id', blankIds); if (error) { setBusy(event.currentTarget, false); return toast(error.message, 'err'); } }
+      const extraQuestionIds = (loadedQuestions || []).slice(questionCount).map((q) => q.id);
+      if (extraQuestionIds.length) { const { error } = await supabase.from('exam_questions').delete().in('id', extraQuestionIds); if (error) { setBusy(event.currentTarget, false); return toast(error.message, 'err'); } }
+      const { error: examSaveError } = await supabase.from('exams').update({ title: m.el.querySelector('#mqTitle').value.trim(), instructions: m.el.querySelector('#mqInstructions').value.trim(), duration_min: Number(m.el.querySelector('#mqDuration').value) || 13, pass_mark: Math.max(50, Number(m.el.querySelector('#mqPass').value) || 50), module_id: isFinal ? null : module.id, is_final: isFinal, published: publish }).eq('id', activeExam.id);
+      if (examSaveError) { setBusy(event.currentTarget, false); return toast(examSaveError.message, 'err'); }
+      m.close(); toast(publish ? 'Quiz saved and published for students' : 'Quiz draft saved', 'ok'); courseBuilder(builderCourseId);
+    });
+  }
+
   async function courseBuilder(courseId) {
     $('panel').innerHTML = '<div class="card skeleton" style="min-height:260px"></div>';
-    const { data: courses, error } = await supabase.from('courses').select('id,title,lessons_start_at').order('sort_order');
+    let courseQuery = supabase.from('courses').select('id,title,lessons_start_at').order('sort_order');
+    if (me.role === T) {
+      const { data: tutorRows, error: tutorError } = await supabase.from('tutors').select('id').eq('user_id', me.id);
+      if (tutorError) { $('panel').innerHTML = empty('Could not find your tutor profile', tutorError.message); return; }
+      const tutorIds = (tutorRows || []).map((tutor) => tutor.id);
+      if (!tutorIds.length) { $('panel').innerHTML = empty('Tutor profile is not linked', 'Ask an admin to link your login to your tutor profile before you build quizzes.'); return; }
+      const { data: assignments, error: assignmentError } = await supabase.from('course_tutors').select('course_id').in('tutor_id', tutorIds);
+      if (assignmentError) { $('panel').innerHTML = empty('Could not load your assigned courses', assignmentError.message); return; }
+      const assignedIds = [...new Set((assignments || []).map((assignment) => assignment.course_id))];
+      if (!assignedIds.length) { $('panel').innerHTML = empty('No courses assigned', 'Ask an admin to assign a course to your tutor profile before creating or publishing its quizzes.'); return; }
+      courseQuery = courseQuery.in('id', assignedIds);
+    }
+    const { data: courses, error } = await courseQuery;
     if (error) { $('panel').innerHTML = empty('Could not load courses', error.message); return; }
     if (!courses?.length) { $('panel').innerHTML = empty('No courses assigned', 'Create a course or ask an admin to assign one to you.'); return; }
     const selectedCourse = courseId || builderCourseId || courses[0].id;
     if (!courses.some((course) => course.id === selectedCourse)) return courseBuilder(courses[0].id);
     builderCourseId = selectedCourse;
-    const [{ data: modules }, { data: lessons }, { data: resources }] = await Promise.all([
+    const [moduleResult, lessonResult, resourceResult, examResult] = await Promise.all([
       supabase.from('course_modules').select('*').eq('course_id', selectedCourse).order('position'),
       supabase.from('lessons').select('*').eq('course_id', selectedCourse).order('position'),
       supabase.from('course_resources').select('id,title,resource_type,published').eq('course_id', selectedCourse).order('created_at', { ascending: false }),
+      supabase.from('exams').select('*').eq('course_id', selectedCourse).order('created_at'),
     ]);
+    const loadError = moduleResult.error || lessonResult.error || resourceResult.error || examResult.error;
+    if (loadError) { $('panel').innerHTML = empty('Could not load course quizzes and learning content', loadError.message); return; }
+    const modules = moduleResult.data, lessons = lessonResult.data, resources = resourceResult.data, exams = examResult.data;
     const moduleRows = modules || [];
     const lessonRows = lessons || [];
     const resourceRows = resources || [];
+    const examRows = exams || [];
+    const finalQuiz = examRows.find((exam) => exam.is_final);
     $('panel').innerHTML = `<div class="tools"><label class="label" for="builderCourse">Course</label><select class="input" id="builderCourse" style="max-width:460px">${courses.map((course) => `<option value="${course.id}" ${course.id === selectedCourse ? 'selected' : ''}>${esc(course.title)}</option>`).join('')}</select><span class="grow"></span><button class="btn btn-lime btn-sm" id="addModule">${icon('plus', '', 16)}Add module</button></div>
-      <div class="panel"><div class="section-head"><div><h2>${esc(courses.find((course) => course.id === selectedCourse)?.title || '')}</h2><p class="muted">${moduleRows.length} modules Â· ${lessonRows.length} sections Â· ${resourceRows.length} resources</p></div><button class="btn btn-dark btn-sm" id="addResource">${icon('upload', '', 16)}Upload resource</button></div>
+      <div class="panel"><div class="section-head"><div><h2>${esc(courses.find((course) => course.id === selectedCourse)?.title || '')}</h2><p class="muted">${moduleRows.length} modules Â· ${lessonRows.length} sections Â· ${resourceRows.length} resources</p></div><div class="btn-row"><button class="btn ${finalQuiz?.published ? 'btn-outline' : 'btn-lime'} btn-sm" data-edit-final="${finalQuiz?.id || ''}">${finalQuiz ? `Edit final quiz · ${finalQuiz.published ? 'Published' : 'Draft'}` : 'Create final quiz'}</button><button class="btn btn-dark btn-sm" id="addResource">${icon('upload', '', 16)}Upload resource</button></div></div>
       ${moduleRows.map((module) => {
         const moduleLessons = lessonRows.filter((lesson) => lesson.module_id === module.id);
-        return `<section class="panel"><div class="tools"><div class="grow"><h3>Module ${module.position}: ${esc(module.title)}</h3><p class="muted">${esc(module.summary || '')}</p></div><button class="btn btn-ghost btn-sm" data-edit-module="${module.id}">Edit</button><button class="btn btn-outline btn-sm" data-auto-quiz="${module.id}">Generate quiz draft</button><button class="btn btn-lime btn-sm" data-add-lesson="${module.id}">${icon('plus', '', 16)}Add section</button></div>
+        const moduleQuiz = examRows.find((exam) => exam.module_id === module.id);
+        return `<section class="panel"><div class="tools"><div class="grow"><h3>Module ${module.position}: ${esc(module.title)}</h3><p class="muted">${esc(module.summary || '')}</p></div><button class="btn btn-ghost btn-sm" data-edit-module="${module.id}">Edit module</button><button class="btn btn-outline btn-sm" data-auto-quiz="${module.id}">Generate quiz draft</button><button class="btn btn-dark btn-sm" data-edit-quiz="${module.id}">${moduleQuiz ? `Edit quiz${moduleQuiz.published ? ' · Published' : ' · Draft'}` : 'Build module quiz'}</button><button class="btn btn-lime btn-sm" data-add-lesson="${module.id}">${icon('plus', '', 16)}Add section</button></div>
           ${moduleLessons.length ? `<div class="list">${moduleLessons.map((lesson) => `<div class="list-item"><div class="grow"><strong>${esc(lesson.title)}</strong><p class="muted">${esc(lesson.duration_min ? `${lesson.duration_min} min` : lesson.video_url ? 'Video attached' : 'Lesson notes')}</p></div><button class="btn btn-ghost btn-sm" data-edit-lesson="${lesson.id}">Edit section</button></div>`).join('')}</div>` : '<p class="muted">No sections yet. Add your first lesson section.</p>'}</section>`;
       }).join('') || empty('No modules yet', 'Add a module to begin building this course.')}
       <section class="panel"><div class="tools"><div class="grow"><h3>Learning resources</h3><p class="muted">Private files are available only to enrolled students and assigned tutors.</p></div><button class="btn btn-dark btn-sm" data-v="resources">Manage resources</button></div>${resourceRows.slice(0, 5).map((resource) => `<p class="hint">${esc(resource.title)} Â· ${esc(resource.resource_type)} Â· ${resource.published ? 'Published' : 'Draft'}</p>`).join('')}</section>
@@ -764,19 +827,21 @@ if (!configured) {
         formModal.close(); toast('Module created', 'ok'); courseBuilder(selectedCourse);
       });
     });
-    $('panel').querySelectorAll('[data-edit-module]').forEach((button) => button.addEventListener('click', () => form('modules', moduleRows.find((module) => module.id === button.dataset.editModule))));
-    $('panel').querySelectorAll('[data-edit-lesson]').forEach((button) => button.addEventListener('click', () => form('lessons', lessonRows.find((lesson) => lesson.id === button.dataset.editLesson))));
+    $('panel').querySelectorAll('[data-edit-module]').forEach((button) => button.addEventListener('click', () => form('modules', moduleRows.find((module) => module.id === button.dataset.editModule), () => courseBuilder(selectedCourse))));
+    $('panel').querySelectorAll('[data-edit-lesson]').forEach((button) => button.addEventListener('click', () => form('lessons', lessonRows.find((lesson) => lesson.id === button.dataset.editLesson), () => courseBuilder(selectedCourse))));
+    $('panel').querySelectorAll('[data-edit-quiz]').forEach((button) => button.addEventListener('click', () => editModuleQuiz(moduleRows.find((module) => module.id === button.dataset.editQuiz), examRows.find((exam) => exam.module_id === button.dataset.editQuiz))));
+    $('panel').querySelector('[data-edit-final]')?.addEventListener('click', (event) => editModuleQuiz(null, finalQuiz));
     $('panel').querySelectorAll('[data-auto-quiz]').forEach((button) => button.addEventListener('click', async () => {
       const module = moduleRows.find((item) => item.id === button.dataset.autoQuiz); const sourceLessons = lessonRows.filter((lesson) => lesson.module_id === module.id);
+      const existingQuiz = examRows.find((exam) => exam.module_id === module.id);
+      if (existingQuiz) { toast('This module already has a quiz. Edit its draft or published version below.', 'info'); return editModuleQuiz(module, existingQuiz); }
       if (!sourceLessons.length) return toast('Add lesson sections before generating a quiz.', 'err');
-      const statements = sourceLessons.flatMap((lesson) => String(lesson.content || '').split(/[.!?\n]+/).map((part) => part.trim()).filter((part) => part.length >= 12).map((part) => `${lesson.title}: ${part}`));
-      const pool = [...new Set([...statements, ...sourceLessons.map((lesson) => `The section ${lesson.title} is included in this module.`)])];
-      while (pool.length < 7) pool.push(`Review the key learning points in ${module.title} and its lesson sections.`);
-      if (pool.length < 7) return toast('Add more lesson notes so the draft has enough source material.', 'err');
-      const m = modal({ title: 'Generate quiz draft', body: `<p>This creates seven draft questions from this moduleâ€™s lesson notes and section titles. Review and edit every question and answer before publishing.</p><div class="alert info">Generated quizzes start unpublished and use a 50% pass mark with a 13-minute timer.</div>`, actions: '<button class="btn btn-lime" id="makeAutoQuiz">Generate draft</button>' });
-      m.el.querySelector('#makeAutoQuiz').addEventListener('click', async (event) => { setBusy(event.currentTarget, true, 'Generating'); const { data: exam, error: examError } = await supabase.from('exams').insert({ course_id: selectedCourse, module_id: module.id, is_final: false, title: `Module ${module.position}: ${module.title} Quiz`, instructions: 'Auto-generated draft. Tutor must review and edit the questions and answers before publishing.', duration_min: 13, pass_mark: 50, published: false }).select('id').single(); if (examError) { setBusy(event.currentTarget, false); return toast(examError.message, 'err'); }
-        const rows = Array.from({ length: 7 }, (_, index) => { const answer = pool[index % pool.length]; const distractors = pool.filter((item) => item !== answer).slice(index % Math.max(pool.length - 3, 1), index % Math.max(pool.length - 3, 1) + 3); while (distractors.length < 3) distractors.push(`Review another section in ${module.title}.`); return { exam_id: exam.id, question: `Which learning point is covered in this module? (Draft ${index + 1})`, options: [answer, ...distractors.slice(0, 3)], correct_index: 0, position: index + 1 }; });
-        const { error: questionError } = await supabase.from('exam_questions').insert(rows); if (questionError) { await supabase.from('exams').delete().eq('id', exam.id); setBusy(event.currentTarget, false); return toast(questionError.message, 'err'); } m.close(); toast('Unpublished 7-question draft created; review it in Quizzes and Questions.', 'ok');
+      const statements = sourceLessons.flatMap((lesson) => String(lesson.content || '').split(/[.!?\n]+/).map((part) => part.trim()).filter((part) => part.length >= 18).map((part) => ({ lesson, text: part })));
+      if (new Set(sourceLessons.map((lesson) => lesson.title)).size < 4 || statements.length < 4) return toast('Add lesson notes and at least four titled sections before generating a quiz draft.', 'err');
+      const m = modal({ title: 'Generate quiz draft', body: `<p>This creates seven editable questions from the lesson notes. Each asks students to identify which section covers a learning point. Review the wording and answer choices before publishing.</p><div class="alert info">Generated quizzes start unpublished with a 50% pass mark and a 13-minute timer.</div>`, actions: '<button class="btn btn-lime" id="makeAutoQuiz">Generate draft</button>' });
+      m.el.querySelector('#makeAutoQuiz').addEventListener('click', async (event) => { setBusy(event.currentTarget, true, 'Generating'); const { data: exam, error: examError } = await supabase.from('exams').insert({ course_id: selectedCourse, module_id: module.id, is_final: false, title: `Module ${module.position}: ${module.title} Quiz`, instructions: 'Generated draft. Review and edit every question and answer before publishing.', duration_min: 13, pass_mark: 50, published: false }).select('*').single(); if (examError) { setBusy(event.currentTarget, false); return toast(examError.message, 'err'); }
+        const rows = Array.from({ length: 7 }, (_, index) => { const source = statements[index % statements.length]; const titles = [...new Set(sourceLessons.map((lesson) => lesson.title))]; const choices = [source.lesson.title, ...titles.filter((title) => title !== source.lesson.title).slice(0, 3)]; const options = choices.map((title) => ({ title, sort: Math.random() })).sort((a, b) => a.sort - b.sort).map((item) => item.title); return { exam_id: exam.id, question: `Which section covers this learning point: “${source.text}”?`, options, correct_index: options.indexOf(source.lesson.title), position: index + 1 }; });
+        const { error: questionError } = await supabase.from('exam_questions').insert(rows); if (questionError) { await supabase.from('exams').delete().eq('id', exam.id); setBusy(event.currentTarget, false); return toast(questionError.message, 'err'); } m.close(); toast('Draft created. Review the questions and publish when ready.', 'ok'); editModuleQuiz(module, exam);
       });
     }));
     $('panel').querySelectorAll('[data-add-lesson]').forEach((button) => button.addEventListener('click', () => {

@@ -1,4 +1,4 @@
-﻿import { supabase, configured, requireAuth, signOut, getProfile } from './supabase.js';
+import { supabase, configured, requireAuth, signOut, getProfile } from './supabase.js';
 import { getSetting } from './api.js';
 import { esc, safeLink, money, fmtDate, icon, modal, toast, setBusy, empty, arr } from './ui.js';
 import { CONFIG } from './config.js';
@@ -26,7 +26,7 @@ if (!configured) {
   const updateLiveClock = () => { liveStatus.querySelector('time').textContent = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date()); };
   updateLiveClock(); setInterval(updateLiveClock, 30000);
   const cfg = (await getSetting('certificate')) || {};
-  const S = { enrolls: null, prog: {}, lessons: {}, done: null, certCourses: [] };
+  const S = { enrolls: null, prog: {}, lessons: {}, done: null, certCourses: [], certs: null };
   let notificationFilter = 'all';
   let groupChatChannel = null;
   let messagingCleanup = null;
@@ -34,14 +34,15 @@ if (!configured) {
   const typingTimers = new Map();
   const loadEnrolls = async () => {
     if (S.enrolls) return S.enrolls;
-    const [{ data }, { data: certificates }] = await Promise.all([supabase.from('enrollments').select('*, course:courses(id,slug,title,image_url,duration,price,currency,category,lessons_start_at)').eq('user_id', me.id).order('enrolled_at', { ascending: false }), supabase.from('certificates').select('course_id').eq('user_id', me.id).eq('status', 'valid')]);
+    const [{ data }, { data: certificates }] = await Promise.all([supabase.from('enrollments').select('*, course:courses(id,slug,title,image_url,duration,price,currency,category,lessons_start_at)').eq('user_id', me.id).order('enrolled_at', { ascending: false }), supabase.from('certificates').select('*').eq('user_id', me.id)]);
     S.enrolls = data || [];
+    S.certs = certificates || [];
     S.certCourses = (certificates || []).map((c) => c.course_id);
     await Promise.all(S.enrolls.filter((e) => e.status === 'active' || S.certCourses.includes(e.course_id)).map(async (e) => { const { data: p } = await supabase.rpc('course_progress_summary', { p_course: e.course_id }); S.prog[e.course_id] = p; }));
     return S.enrolls;
   };
   const active = async () => (await loadEnrolls()).filter((e) => e.status === 'active' || S.certCourses.includes(e.course_id));
-  const refreshAll = () => { S.enrolls = null; S.done = null; };
+  const refreshAll = () => { S.enrolls = null; S.certs = null; S.done = null; };
   const ring = (p) => `<div class="ring-progress" style="--p:${p}"><b>${p}%</b></div>`;
   const cpStats = (p) => p ? `<div class="cp-stats"><span>Sections ${p.lessons_done}/${p.lessons_total}</span><span>Assignments ${p.assignments_done}/${p.assignments_total}</span><span>Projects checked ${p.projects_checked || 0}/${p.projects_total || 0}</span><span>${p.eligible ? '<strong style="color:var(--ok)">Eligible for certificate</strong>' : 'Course in progress'}</span></div>` : '';
   const needCourse = (t) => empty('No active courses yet', t || 'Enrol in a course and complete payment to unlock this section.', '<a class="btn btn-lime" href="courses.html">Browse courses</a>');
@@ -121,10 +122,17 @@ if (!configured) {
     },
     async certificates() {
       await loadEnrolls();
-      const { data: certs } = await supabase.from('certificates').select('*').eq('user_id', me.id); S.certs = certs || [];
+      if (S.certs === null) {
+        const { data, error } = await supabase.from('certificates').select('*').eq('user_id', me.id);
+        if (error) return empty('Certificates unavailable', error.message);
+        S.certs = data || [];
+      }
       const eligible = S.enrolls.filter((e) => e.status === 'active' && S.prog[e.course_id]?.eligible && !S.certs.find((c) => c.course_id === e.course_id));
+      const previews = S.enrolls.filter((e) => e.status === 'active' && !S.certs.some((c) => c.course_id === e.course_id));
       return `${eligible.map((e) => `<div class="alert ok" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">You completed ${esc(e.course.title)}.<button class="btn btn-dark btn-sm" data-claim="${e.course_id}">Get certificate</button></div>`).join('')}
-      ${S.certs.length ? `<div class="list">${S.certs.map((c) => `<div class="list-item"><div class="grow"><h3>${esc(c.course_title)}</h3><p class="muted" style="font-size:.9rem">No. ${esc(c.certificate_number)} Â· completed ${fmtDate(c.completed_at)}</p></div><span class="badge ${c.status === 'valid' ? 'ok' : 'err'}">${c.status}</span><button class="btn btn-dark btn-sm" data-cert="${c.id}">View</button></div>`).join('')}</div>` : eligible.length ? '' : empty('No certificates yet', 'Complete course sections and quizzes, and submit all projects for tutor review before claiming your certificate.')}`;
+      ${previews.length ? `<section class="panel"><h2>Certificate preview</h2><p class="muted">Preview the sample layout for a course in progress. Samples are marked clearly and have no certificate number or verification code.</p><div class="list">${previews.map((e) => `<div class="list-item"><div class="grow"><h3>${esc(e.course.title)}</h3><p class="muted">Course in progress · ${S.prog[e.course_id]?.percent || 0}% complete</p></div><button class="btn btn-outline btn-sm" data-sample-cert="${e.course_id}">Open sample</button><button class="btn btn-dark btn-sm" data-download-sample="${e.course_id}">Download sample</button></div>`).join('')}</div></section>` : ''}
+      ${S.certs.length ? `<section class="panel"><h2>My certificates</h2><p class="muted">Your issued certificates remain available here whenever you sign in.</p><div class="list">${S.certs.map((c) => `<div class="list-item"><div class="grow"><h3>${esc(c.course_title)}</h3><p class="muted" style="font-size:.9rem">No. ${esc(c.certificate_number)} Â· completed ${fmtDate(c.completed_at)}</p></div><span class="badge ${c.status === 'valid' ? 'ok' : 'err'}">${c.status}</span><button class="btn btn-outline btn-sm" data-cert="${c.id}">Open</button>${c.status === 'valid' ? `<button class="btn btn-dark btn-sm" data-download-cert="${c.id}">Download</button>` : ''}</div>`).join('')}</div></section>` : ''}
+      ${!S.certs.length && !eligible.length && !previews.length ? empty('No certificates yet', 'Enroll in a course to preview its sample certificate. Complete all sections, required quizzes and graded projects to claim a valid certificate.') : ''}`;
     },
     async 'id-card'() {
       const [{ data: card, error }, { data: student }, { data: profile }, { data: enrollment }] = await Promise.all([
@@ -170,8 +178,10 @@ if (!configured) {
       return data?.length ? `${pend ? `<div class="alert info">A pending payment unlocks your course only after it is verified. If you have just paid, wait a minute and <button class="btn btn-ghost btn-sm" data-go="payments">Refresh</button></div>` : ''}<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Course</th><th>Amount</th><th>Reference</th><th>Status</th></tr></thead><tbody>${data.map((p) => `<tr><td>${fmtDate(p.created_at)}</td><td>${esc(p.course?.title)}</td><td>${money(p.amount, p.currency)}</td><td>${esc(p.reference)}</td><td><span class="badge ${p.status === 'success' ? 'ok' : p.status === 'pending' ? 'warn' : 'err'}">${p.status}</span></td></tr>`).join('')}</tbody></table></div>` : empty('No payments yet', 'Payments for your enrolments will be listed here.');
     },
     async notifications() {
-      const { data } = await supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(50);
-      if (!data?.length) return empty('Youâ€™re all caught up', 'Updates about your courses, projects and certificates will appear here.');
+      const { data, error } = await supabase.from('notifications').select('id,title,body,link,read,created_at').eq('user_id', me.id).order('created_at', { ascending: false }).limit(50);
+      if (error) return empty('Notifications unavailable', `We could not load your updates. ${error.message}`);
+      if (!data?.length) return empty('You’re all caught up', 'Updates about your courses, projects and certificates will appear here.');
+      const unread = data.filter((n) => !n.read).length;
       const visible = notificationFilter === 'unread' ? data.filter((n) => !n.read) : data;
       return `<section class="notifications-page"><header class="notifications-heading"><div><span class="eyebrow">YOUR UPDATES</span><h2>Notifications</h2><p>${unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'You have read all your updates.'}</p></div>${unread ? '<button class="btn btn-outline btn-sm" data-readall>Mark all as read</button>' : ''}</header><div class="message-filters" role="group" aria-label="Notification filter"><button data-notice-filter="all" class="${notificationFilter === 'all' ? 'active' : ''}">All</button><button data-notice-filter="unread" class="${notificationFilter === 'unread' ? 'active' : ''}">Unread</button></div><div class="notification-list">${visible.map((n) => `<article class="notification-card ${n.read ? '' : 'unread'}"><span class="notification-icon">${icon('bell', '', 18)}</span><div class="notification-content"><div class="notification-title-row"><h3>${esc(n.title)}</h3>${n.read ? '<span class="notification-state">Read</span>' : '<span class="notification-state new">New</span>'}</div><p>${esc(n.body)}</p><time>${fmtDate(n.created_at, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</time></div><div class="notification-actions">${n.link ? `<a class="btn btn-outline btn-sm" href="${safeLink(n.link)}">Open update</a>` : ''}${!n.read ? `<button class="btn btn-ghost btn-sm" data-notice-read="${n.id}">Mark read</button>` : ''}</div></article>`).join('') || '<div class="messenger-empty">No notifications in this view.</div>'}</div></section>`;
     },
@@ -195,9 +205,23 @@ if (!configured) {
     return en.map((enrollment) => {
       const courseProjects = (projects || []).filter((project) => project.course_id === enrollment.course_id);
       const checked = courseProjects.filter((project) => submitted.get(project.id)?.status === 'graded');
-      const cv = `<!doctype html><html lang="en"><meta charset="utf-8"><title>${esc(profile?.full_name || me.full_name)} - ${esc(enrollment.course.category || enrollment.course.title)} CV</title><style>body{font:16px Arial,sans-serif;color:#17212b;max-width:850px;margin:40px auto;line-height:1.55;padding:0 24px}h1,h2{margin-bottom:6px}header{border-bottom:3px solid #17212b;padding-bottom:14px}.muted{color:#586571}li{margin:8px 0}@media print{button{display:none}}</style><header><h1>${esc(profile?.full_name || me.full_name || 'Student')}</h1><p>${esc(profile?.email || me.email)} Â· ${esc(profile?.phone || '')} Â· ${esc(profile?.address || '')}</p><h2>Target field: ${esc(enrollment.course.category || enrollment.course.title)}</h2></header><h2>Professional profile</h2><p>${esc(profile?.interest || `Learner specializing in ${enrollment.course.category || enrollment.course.title}, with practical project experience and structured course training.`)}</p><h2>Education and training</h2><p><strong>${esc(enrollment.course.title)}</strong> Â· Courssins Technology Institute</p><h2>Reviewed project experience</h2><ul>${checked.map((project) => `<li><strong>${esc(project.title)}</strong>${project.instructions ? ` â€” ${esc(project.instructions)}` : ''}${submitted.get(project.id)?.feedback ? `<br> Tutor review: ${esc(submitted.get(project.id).feedback)}` : ''}</li>`).join('') || '<li>Project work is in progress.</li>'}</ul><h2>Skills</h2><p>${esc(enrollment.course.category || enrollment.course.title)} Â· Project planning Â· Written communication Â· Digital collaboration</p><button onclick="window.print()">Print / save as PDF</button></html>`;
-      const url = URL.createObjectURL(new Blob([cv], { type: 'text/html' }));
-      return `<div class="panel"><div class="tools"><div class="grow"><h2>${esc(enrollment.course.title)} portfolio</h2><p class="muted">${checked.length}/${courseProjects.length} projects tutor-checked</p></div><a class="btn btn-lime btn-sm" href="${url}" target="_blank" rel="noopener">Generate / print tailored CV</a><a class="btn btn-outline btn-sm" href="${url}" download="${esc((profile?.full_name || 'student').replace(/[^a-z0-9]+/gi, '-'))}-${esc((enrollment.course.category || enrollment.course.title).replace(/[^a-z0-9]+/gi, '-'))}-CV.html">Download CV</a></div><div class="list">${courseProjects.map((project) => { const submission = submitted.get(project.id); return `<article class="list-item"><div class="grow"><h3>${esc(project.title)}</h3><p class="muted">${project.due_at ? `Due ${fmtDate(project.due_at)}` : 'No deadline set'} Â· ${submission?.status === 'graded' ? `Tutor checked Â· score ${submission.score}/${project.max_score}` : submission ? 'Submitted Â· awaiting tutor review' : 'Not submitted'}</p>${submission?.feedback ? `<p>${esc(submission.feedback)}</p>` : ''}</div></article>`; }).join('') || '<p class="muted">Your tutor has not assigned projects for this course yet.</p>'}</div></div>`;
+      const storageKey = `courssins-cv-${me.id}-${enrollment.course_id}`;
+      const generatedExperience = checked.map((project) => `${project.title}${project.instructions ? ` — ${project.instructions}` : ''}${submitted.get(project.id)?.feedback ? ` (Tutor feedback: ${submitted.get(project.id).feedback})` : ''}`).join('\n');
+      const generatedSkills = [...new Set([enrollment.course.category || enrollment.course.title, 'Project planning', 'Written communication', 'Digital collaboration'])].join(', ');
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { saved = {}; }
+      const field = (id, label, value, type = 'textarea') => type === 'textarea' || id === 'cvLinks'
+        ? `<div class="field"><label for="${id}">${label}</label><textarea class="input" id="${id}" name="${id}" rows="${id === 'cvSummary' || id === 'cvExperience' ? 4 : 3}" maxlength="${id === 'cvSummary' ? 1400 : 5000}">${esc(value || '')}</textarea></div>`
+        : `<div class="field"><label for="${id}">${label}</label><input class="input" id="${id}" name="${id}" value="${esc(value || '')}" maxlength="${id === 'cvLinks' ? 1200 : 180}" ${id === 'cvEmail' ? 'type="email"' : 'type="text"'}></div>`;
+      const values = {
+        cvName: saved.cvName ?? profile?.full_name ?? me.full_name ?? '', cvEmail: saved.cvEmail ?? profile?.email ?? me.email ?? '', cvPhone: saved.cvPhone ?? profile?.phone ?? '',
+        cvLocation: saved.cvLocation ?? profile?.address ?? '', cvRole: saved.cvRole ?? enrollment.course.category ?? enrollment.course.title,
+        cvWorkMode: saved.cvWorkMode ?? 'Remote', cvSummary: saved.cvSummary ?? profile?.interest ?? `Course-trained ${enrollment.course.category || enrollment.course.title} professional, ready to contribute through clear communication, reliable delivery, and practical project work.`,
+        cvExperience: saved.cvExperience ?? generatedExperience, cvSkills: saved.cvSkills ?? generatedSkills,
+        cvEducation: saved.cvEducation ?? `${enrollment.course.title} — Courssins Technology Institute`, cvLinks: saved.cvLinks ?? '',
+      };
+      const autofill = { cvName: profile?.full_name || me.full_name || '', cvEmail: profile?.email || me.email || '', cvPhone: profile?.phone || '', cvLocation: profile?.address || '', cvRole: enrollment.course.category || enrollment.course.title, cvWorkMode: 'Remote', cvSummary: profile?.interest || `Course-trained ${enrollment.course.category || enrollment.course.title} professional, ready to contribute through clear communication, reliable delivery, and practical project work.`, cvExperience: generatedExperience, cvSkills: generatedSkills, cvEducation: `${enrollment.course.title} — Courssins Technology Institute`, cvLinks: '' };
+      return `<section class="panel" data-cv-editor data-course="${enrollment.course_id}" data-store="${esc(storageKey)}" data-fill="${esc(JSON.stringify(autofill))}"><div class="tools"><div class="grow"><h2>${esc(enrollment.course.title)} CV</h2><p class="muted">${checked.length}/${courseProjects.length} tutor-checked projects are available to include.</p></div><button type="button" class="btn btn-outline btn-sm" data-cv-fill>Auto-fill draft</button></div><p class="hint">Fields are prefilled from your profile, course, and reviewed projects. Edit them for each opportunity; your changes save in this browser.</p><form class="cv-form"><div class="row-2">${field('cvName', 'Name', values.cvName, 'text')}${field('cvRole', 'Target role or service', values.cvRole, 'text')}</div><div class="row-2">${field('cvEmail', 'Email', values.cvEmail, 'text')}${field('cvPhone', 'Phone', values.cvPhone, 'text')}</div><div class="row-2">${field('cvLocation', 'Location (city / country)', values.cvLocation, 'text')}<div class="field"><label for="cvWorkMode">Work arrangement</label><select class="input" id="cvWorkMode" name="cvWorkMode">${['Freelance', 'Remote', 'Hybrid', 'On-site', 'Contract', 'Full-time', 'Part-time', 'Open to opportunities'].map((mode) => `<option ${values.cvWorkMode === mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></div></div>${field('cvSummary', 'Professional summary', values.cvSummary)}${field('cvExperience', 'Projects and experience (one item per paragraph)', values.cvExperience)}${field('cvSkills', 'Skills (comma separated)', values.cvSkills)}${field('cvEducation', 'Education and training', values.cvEducation)}${field('cvLinks', 'Portfolio / LinkedIn / other links (one per line)', values.cvLinks, 'text')}<div class="btn-row"><button type="submit" class="btn btn-lime">Generate / print CV</button><a class="btn btn-outline" data-cv-download hidden>Download CV</a></div><p class="hint" data-cv-status aria-live="polite">Your draft saves automatically as you edit.</p></form></section><div class="panel"><h3>Course projects</h3><p class="muted">Only tutor-checked work is prefilled as reviewed experience. You can add other relevant projects in the CV fields above.</p><div class="list">${courseProjects.map((project) => { const submission = submitted.get(project.id); return `<article class="list-item"><div class="grow"><h3>${esc(project.title)}</h3><p class="muted">${project.due_at ? `Due ${fmtDate(project.due_at)}` : 'No deadline set'} · ${submission?.status === 'graded' ? `Tutor checked · score ${submission.score}/${project.max_score}` : submission ? 'Submitted · awaiting tutor review' : 'Not submitted'}</p>${submission?.feedback ? `<p>${esc(submission.feedback)}</p>` : ''}</div></article>`; }).join('') || '<p class="muted">Your tutor has not assigned projects for this course yet.</p>'}</div></div>`;
     }).join('');
   };
 
@@ -254,7 +278,14 @@ if (!configured) {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-readall],[data-notice-read],[data-notice-filter],[data-react-post],[data-book-event],[data-group-info],[data-group-info-close]'); if (!t) return;
+    const t = e.target.closest('[data-tab],[data-go],[data-lesson],[data-assign],[data-exam],[data-claim],[data-cert],[data-download-cert],[data-sample-cert],[data-download-sample],[data-readall],[data-notice-read],[data-notice-filter],[data-react-post],[data-book-event],[data-group-info],[data-group-info-close],[data-cv-fill]'); if (!t) return;
+    if (t.dataset.cvFill !== undefined) {
+      const editor = t.closest('[data-cv-editor]'); let suggested;
+      try { suggested = JSON.parse(editor.dataset.fill || '{}'); } catch { return toast('Could not prepare the suggested CV details.', 'err'); }
+      Object.entries(suggested).forEach(([name, value]) => { const input = editor.querySelector(`[name="${name}"]`); if (input) input.value = value; });
+      editor.querySelector('.cv-form')?.dispatchEvent(new Event('input', { bubbles: true }));
+      toast('CV fields filled from your profile, course, and reviewed projects.', 'ok'); return;
+    }
     if (t.dataset.noticeFilter) { notificationFilter = t.dataset.noticeFilter; return void show('notifications'); }
     if (t.dataset.groupInfo || t.dataset.groupInfoClose) {
       const groupId = t.dataset.groupInfo || t.dataset.groupInfoClose, menu = document.querySelector(`[data-group-menu="${groupId}"]`), state = groupPresenceChannels.get(groupId); if (!menu || !state) return;
@@ -268,9 +299,12 @@ if (!configured) {
     if (t.dataset.lesson) return location.assign(`learn.html?lesson=${encodeURIComponent(t.dataset.lesson)}`);
     if (t.dataset.assign) return openAssignment(t.dataset.assign);
     if (t.dataset.exam) return openExam(t.dataset.exam);
-    if (t.dataset.claim) { setBusy(t, true, 'Issuing'); const { error } = await supabase.rpc('claim_certificate', { p_course: t.dataset.claim }); if (error) { setBusy(t, false); return toast(error.message, 'err'); } toast('Certificate issued', 'ok'); return void show('certificates'); }
+    if (t.dataset.claim) { setBusy(t, true, 'Issuing'); const { error } = await supabase.rpc('claim_certificate', { p_course: t.dataset.claim }); if (error) { setBusy(t, false); return toast(error.message, 'err'); } S.certs = null; toast('Certificate issued', 'ok'); return void show('certificates'); }
     if (t.dataset.cert) return openCert(t.dataset.cert);
-    if (t.dataset.readall) { await supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false); return void show('notifications'); }
+    if (t.dataset.downloadCert) return downloadCert(t.dataset.downloadCert);
+    if (t.dataset.sampleCert) { const enrollment = S.enrolls?.find((item) => item.course_id === t.dataset.sampleCert && item.status === 'active'); if (enrollment) openSampleCertificate(enrollment); return; }
+    if (t.dataset.downloadSample) { const enrollment = S.enrolls?.find((item) => item.course_id === t.dataset.downloadSample && item.status === 'active'); if (enrollment) downloadSampleCertificate(enrollment); return; }
+    if (t.dataset.readall) { const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false); if (error) return toast(`Could not mark notifications read: ${error.message}`, 'err'); return void show('notifications'); }
     if (t.dataset.noticeRead) { const { error } = await supabase.from('notifications').update({ read: true }).eq('id', t.dataset.noticeRead).eq('user_id', me.id); if (error) return toast(error.message, 'err'); return void show('notifications'); }
     if (t.dataset.reactPost) { const { error } = await supabase.from('tutor_group_reactions').insert({ post_id: t.dataset.reactPost, user_id: me.id, reaction: t.dataset.reaction }); if (error && !/duplicate key/i.test(error.message)) return toast(error.message, 'err'); return void show(location.hash.slice(1).split('?')[0] || 'discussions'); }
     if (t.dataset.bookEvent) {
@@ -284,6 +318,12 @@ if (!configured) {
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'lsCourse') show('lessons', e.target.value); });
   document.addEventListener('input', (e) => {
+    const cvEditor = e.target.closest('[data-cv-editor]');
+    if (cvEditor) {
+      const values = Object.fromEntries([...cvEditor.querySelectorAll('[name]')].map((input) => [input.name, input.value]));
+      try { localStorage.setItem(cvEditor.dataset.store, JSON.stringify(values)); } catch { /* Browser storage can be disabled. */ }
+      const status = cvEditor.querySelector('[data-cv-status]'); if (status) status.textContent = 'Draft saved in this browser.';
+    }
     const form = e.target.closest('form[data-group-chat]'); if (!form || e.target.name !== 'message') return;
     const groupId = form.dataset.groupChat, state = groupPresenceChannels.get(groupId); if (!state) return;
     clearTimeout(state.typingTimer);
@@ -296,6 +336,23 @@ if (!configured) {
     clearTimeout(state.typingTimer); state.connection.trackTyping(false); typingTimers.delete(groupId);
   });
   document.addEventListener('submit', async (e) => {
+    const cvForm = e.target.closest('.cv-form');
+    if (cvForm) {
+      e.preventDefault();
+      const editor = cvForm.closest('[data-cv-editor]');
+      const value = (name) => cvForm.elements.namedItem(name)?.value?.trim() || '';
+      const lines = (text) => text.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+      const list = (items) => items.length ? `<ul>${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : '<p>Details available on request.</p>';
+      const links = lines(value('cvLinks')).map((item) => { try { const url = new URL(item); return ['http:', 'https:'].includes(url.protocol) ? `<li><a href="${esc(url.href)}">${esc(item)}</a></li>` : `<li>${esc(item)}</li>`; } catch { return `<li>${esc(item)}</li>`; } });
+      const safeName = value('cvName') || 'CV';
+      const cv = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(safeName)} — ${esc(value('cvRole'))} CV</title><style>body{font:16px 'Plus Jakarta Sans',Arial,sans-serif;color:#17212b;max-width:850px;margin:40px auto;line-height:1.55;padding:0 24px}h1,h2{margin-bottom:6px}header{border-bottom:3px solid #17212b;padding-bottom:14px}header p{color:#586571}h2{margin-top:24px}li{margin:8px 0}a{color:#245f9e;overflow-wrap:anywhere}.print{margin:24px 0;padding:10px 18px;background:#17212b;color:#fff;border:0;border-radius:8px;cursor:pointer}@media print{body{margin:0 auto}.print{display:none}}</style></head><body><header><h1>${esc(safeName)}</h1><p>${[value('cvEmail'), value('cvPhone'), value('cvLocation')].filter(Boolean).map(esc).join(' · ')}</p><h2>${esc(value('cvRole'))}</h2><p>Work preference: ${esc(value('cvWorkMode'))}</p></header><h2>Professional summary</h2><p>${esc(value('cvSummary'))}</p><h2>Projects and experience</h2>${list(lines(value('cvExperience')))}<h2>Skills</h2>${list(value('cvSkills').split(',').map((item) => item.trim()).filter(Boolean))}<h2>Education and training</h2>${list(lines(value('cvEducation')))}${links.length ? `<h2>Portfolio and professional links</h2><ul>${links.join('')}</ul>` : ''}<button class="print" onclick="window.print()">Print / save as PDF</button></body></html>`;
+      const url = URL.createObjectURL(new Blob([cv], { type: 'text/html;charset=utf-8' }));
+      const download = editor.querySelector('[data-cv-download]');
+      if (download.dataset.url) URL.revokeObjectURL(download.dataset.url);
+      download.href = url; download.dataset.url = url; download.download = `${safeName.replace(/[^a-z0-9]+/gi, '-')}-CV.html`; download.hidden = false;
+      const status = editor.querySelector('[data-cv-status]'); if (status) status.textContent = 'Your tailored CV is ready. Print or save it as a PDF, or download the HTML file.';
+      window.open(url, '_blank', 'noopener'); return;
+    }
     const form = e.target.closest('[data-group-chat]'); if (!form) return;
     e.preventDefault(); const body = form.elements.message.value.trim(); if (!body) return;
     const state = groupPresenceChannels.get(form.dataset.groupChat); if (state) { clearTimeout(state.typingTimer); state.connection.trackTyping(false); typingTimers.delete(form.dataset.groupChat); }
@@ -375,9 +432,49 @@ if (!configured) {
   }
   function openCert(id) {
     const c = S.certs.find((x) => x.id === id);
+    if (!c || c.status !== 'valid') return toast('This certificate is not available for download.', 'err');
     const url = `${location.origin}/certificate-verify.html?n=${encodeURIComponent(c.certificate_number)}`;
     const signature = /^https?:\/\//i.test(cfg.signature_url || '') ? `<img class="cert-signature" src="${esc(cfg.signature_url)}" alt="Signature of ${esc(cfg.signatory_name || 'Abdulmannan Sulayman')}">` : '';
-    modal({ title: 'Certificate', wide: true, body: `<div class="cert"><div class="cert-in"><div><img src="assets/images/logo-mark.svg" width="54" height="54" alt="" style="margin:0 auto 8px"><h3>${esc(cfg.organisation || 'Courssins Technology Institute')}</h3><small>Certificate of Completion</small></div><div><small>This certifies that</small><div class="who">${esc(c.student_name)}</div><p style="margin-top:12px"><small>has successfully completed</small></p><h3>${esc(c.course_title)}</h3><small>Completed on ${fmtDate(c.completed_at, { day: 'numeric', month: 'long', year: 'numeric' })}</small></div><div style="width:100%"><div class="cert-sign"><div style="border:0;padding:0">${signature}<div style="border-top:1.5px solid var(--ink);padding-top:6px">${esc(cfg.signatory_name || 'Abdulmannan Sulayman')}<br><small>${esc(cfg.signatory || 'Director of Studies')}</small></div></div><div>${esc(c.certificate_number)}<br><small>Certificate number</small></div></div><p style="margin-top:12px"><small>Verify at ${esc(url)}</small></p></div></div></div>`, actions: `<a class="btn btn-outline" href="${esc(url)}" target="_blank" rel="noopener">Open verification page</a><button class="btn btn-lime" onclick="window.print()">Print or save as PDF</button>` });
+    const certificateModal = modal({ title: 'Certificate', wide: true, body: `<div class="cert"><div class="cert-in"><div><img src="assets/images/logo-mark.svg" width="54" height="54" alt="" style="margin:0 auto 8px"><h3>${esc(cfg.organisation || 'Courssins Technology Institute')}</h3><small>Certificate of Completion</small></div><div><small>This certifies that</small><div class="who">${esc(c.student_name)}</div><p style="margin-top:12px"><small>has successfully completed</small></p><h3>${esc(c.course_title)}</h3><small>Completed on ${fmtDate(c.completed_at, { day: 'numeric', month: 'long', year: 'numeric' })}</small></div><div style="width:100%"><div class="cert-sign"><div style="border:0;padding:0">${signature}<div style="border-top:1.5px solid var(--ink);padding-top:6px">${esc(cfg.signatory_name || 'Abdulmannan Sulayman')}<br><small>${esc(cfg.signatory || 'Director of Studies')}</small></div></div><div>${esc(c.certificate_number)}<br><small>Certificate number</small></div></div><p style="margin-top:12px"><small>Verify at ${esc(url)}</small></p></div></div></div>`, actions: `<a class="btn btn-outline" href="${esc(url)}" target="_blank" rel="noopener">Open verification page</a><button class="btn btn-lime" data-download-cert="${esc(c.id)}">Download certificate</button><button class="btn btn-outline" onclick="window.print()">Print or save as PDF</button>` });
+    certificateModal.el.classList.add('certificate-modal');
+  }
+  function downloadCert(id) {
+    const c = S.certs.find((x) => x.id === id);
+    if (!c || c.status !== 'valid') return toast('This certificate is not available for download.', 'err');
+    const url = `${location.origin}/certificate-verify.html?n=${encodeURIComponent(c.certificate_number)}`;
+    const name = esc(cfg.organisation || 'Courssins Technology Institute');
+    const student = esc(c.student_name);
+    const course = esc(c.course_title);
+    const number = esc(c.certificate_number);
+    const completed = esc(fmtDate(c.completed_at, { day: 'numeric', month: 'long', year: 'numeric' }));
+    const director = esc(cfg.signatory_name || 'Abdulmannan Sulayman');
+    const role = esc(cfg.signatory || 'Director of Studies');
+    const logo = esc(new URL('assets/images/logo-mark.svg', location.href).href);
+    const signature = /^https?:\/\//i.test(cfg.signature_url || '') ? `<img class="signature" src="${esc(cfg.signature_url)}" alt="Signature of ${director}">` : '';
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${student} — ${course} Certificate</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{margin:0;padding:24px;background:#f3f5f2;color:#17212b;font:16px 'Plus Jakarta Sans',Arial,sans-serif}.cert{background:#fff;border:3px solid #17212b;padding:18px;aspect-ratio:1.414/1;width:min(100%,1120px);margin:24px auto}.inner{height:100%;border:1.5px solid #17212b;padding:clamp(22px,4vw,48px);display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:20px;text-align:center;background:radial-gradient(circle at 90% 8%,#eef4d5,transparent 40%)}h1{font-size:clamp(1.4rem,3vw,2.2rem);margin:8px 0}h2{font-size:clamp(1.2rem,3vw,2rem);margin:8px}small{color:#65717b}.who{font-size:clamp(1.4rem,4.4vw,3rem);font-weight:800;border-bottom:3px solid #c8e34a;padding:0 24px 4px}.signrow{display:flex;justify-content:space-around;width:100%;gap:16px}.signrow>div{border-top:1.5px solid #17212b;padding-top:6px;min-width:30%;font-size:.85rem}.signature{display:block;width:min(190px,100%);height:48px;object-fit:contain;margin:0 auto 4px}.verify{max-width:100%;overflow-wrap:anywhere;margin:10px}.print{display:block;margin:18px auto;padding:10px 18px;background:#17212b;color:#fff;border:0;border-radius:8px;cursor:pointer}@media print{body{padding:0;background:#fff}.cert{width:100%;margin:0;break-inside:avoid}.print{display:none}@page{size:landscape;margin:12mm}}</style></head><body><main class="cert"><div class="inner"><header><img src="${logo}" width="54" height="54" alt=""><h1>${name}</h1><small>Certificate of Completion</small></header><section><small>This certifies that</small><div class="who">${student}</div><p><small>has successfully completed</small></p><h2>${course}</h2><small>Completed on ${completed}</small></section><footer style="width:100%"><div class="signrow"><div style="border:0">${signature}<div style="border-top:1.5px solid #17212b;padding-top:6px">${director}<br><small>${role}</small></div></div><div>${number}<br><small>Certificate number</small></div></div><p class="verify"><small>Verify at <a href="${esc(url)}">${esc(url)}</a></small></p></footer></div></main><button class="print" onclick="window.print()">Print or save as PDF</button></body></html>`;
+    const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = blobUrl; link.download = `${c.certificate_number}.html`; document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  }
+  function openSampleCertificate(enrollment) {
+    const signer = esc(cfg.signatory_name || 'Abdulmannan Sulayman');
+    const title = esc(cfg.signatory || 'Director of Studies');
+    const signature = /^https?:\/\//i.test(cfg.signature_url || '') ? `<img class="cert-signature" src="${esc(cfg.signature_url)}" alt="Signature of ${signer}">` : '';
+    const sampleModal = modal({ title: 'Sample certificate preview', wide: true, body: `<div class="cert sample-certificate"><div class="cert-in"><header><img src="assets/images/logo-mark.svg" width="54" height="54" alt=""><h3>${esc(cfg.organisation || 'Courssins Technology Institute')}</h3><small>Certificate of Completion</small></header><section><small>This sample shows how a completed certificate may look for</small><div class="who">${esc(me.full_name || 'Student Name')}</div><p style="margin-top:12px"><small>upon successful completion of</small></p><h3>${esc(enrollment.course.title)}</h3></section><footer class="cert-sign"><div style="border:0;padding:0">${signature}<div style="border-top:1.5px solid var(--ink);padding-top:6px">${signer}<br><small>${title}</small></div></div><div>Sample only<br><small>No certificate number</small></div></footer></div><span class="sample-watermark" aria-hidden="true">SAMPLE</span></div><p class="sample-caption">This sample is not a certificate and cannot be verified.</p>`, actions: `<span class="badge warn">No certificate number</span><button class="btn btn-lime" data-download-sample="${esc(enrollment.course_id)}">Download sample</button>` });
+    sampleModal.el.classList.add('certificate-modal');
+  }
+  function downloadSampleCertificate(enrollment) {
+    const organisation = esc(cfg.organisation || 'Courssins Technology Institute');
+    const student = esc(me.full_name || 'Student Name');
+    const course = esc(enrollment.course.title || 'Course Title');
+    const logo = esc(new URL('assets/images/logo-mark.svg', location.href).href);
+    const signer = esc(cfg.signatory_name || 'Abdulmannan Sulayman');
+    const title = esc(cfg.signatory || 'Director of Studies');
+    const signature = /^https?:\/\//i.test(cfg.signature_url || '') ? `<img class="signature" src="${esc(cfg.signature_url)}" alt="Signature of ${signer}">` : '';
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sample Certificate — ${course}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{margin:0;padding:24px;background:#f3f5f2;color:#17212b;font:16px 'Plus Jakarta Sans',Arial,sans-serif}.cert{position:relative;overflow:hidden;background:#fff;border:3px solid #17212b;padding:18px;aspect-ratio:1.414/1;width:min(100%,1120px);margin:24px auto}.inner{height:100%;border:1.5px solid #17212b;padding:clamp(22px,4vw,48px);display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:20px;text-align:center;background:radial-gradient(circle at 90% 8%,#eef4d5,transparent 40%)}h1{font-size:clamp(1.4rem,3vw,2.2rem);margin:8px 0}h2{font-size:clamp(1.2rem,3vw,2rem);margin:8px}small{color:#65716b}.who{font-size:clamp(1.4rem,4.4vw,3rem);font-weight:800;border-bottom:3px solid #c8e34a;padding:0 24px 4px}.signrow{display:flex;justify-content:space-around;width:100%;gap:16px}.signrow>div{padding-top:6px;min-width:30%;font-size:.85rem}.signatory{border-top:1.5px solid #17212b}.signature{display:block;width:min(190px,100%);height:48px;object-fit:contain;margin:0 auto 4px}.watermark{position:absolute;inset:38% 0 auto;color:#a72b2b;opacity:.18;text-align:center;font-size:clamp(3rem,12vw,8rem);font-weight:900;letter-spacing:.16em;transform:rotate(-12deg);pointer-events:none}.print{display:block;margin:18px auto;padding:10px 18px;background:#17212b;color:#fff;border:0;border-radius:8px;cursor:pointer}@media(max-width:600px){.cert{aspect-ratio:auto;min-height:340px}.inner{min-height:300px}}@media print{body{padding:0;background:#fff}.cert{width:100%;margin:0;break-inside:avoid}.print{display:none}@page{size:landscape;margin:12mm}}</style></head><body><main class="cert"><div class="inner"><header><img src="${logo}" width="54" height="54" alt="Courssins logo"><h1>${organisation}</h1><small>Certificate of Completion</small></header><section><small>This certifies that</small><div class="who">${student}</div><p><small>upon successful completion of</small></p><h2>${course}</h2></section><footer class="signrow"><div class="signatory">${signature}<strong>${signer}</strong><br><small>${title}</small></div><div>Sample only<br><small>No certificate number</small></div></footer></div><span class="watermark" aria-hidden="true">SAMPLE</span></main><p style="text-align:center;color:#65716b">Sample preview — not an issued certificate and cannot be verified.</p><button class="print" onclick="window.print()">Print or save as PDF</button></body></html>`;
+    const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = blobUrl; link.download = 'Courssins-Sample-Certificate.html'; document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   }
   document.addEventListener('submit', async (e) => {
     if (e.target.id === 'profForm') {

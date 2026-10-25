@@ -33,6 +33,20 @@ if (!configured) {
       const renderThreads = (items) => items.filter((row) => !row.parent_id).map((row) => `<article class="discussion-thread"><div class="discussion-avatar">${esc((row.author_name || 'S').trim().slice(0, 1).toUpperCase())}</div><div class="discussion-message"><header><strong>${esc(row.author_name || 'Student')}</strong><time>${fmtDate(row.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></header><p>${esc(row.body)}</p><button type="button" class="discussion-reply" data-reply="${row.id}">Reply</button>${items.filter((reply) => reply.parent_id === row.id).map((reply) => `<div class="discussion-reply-row"><div class="discussion-avatar small">${esc((reply.author_name || 'S').trim().slice(0, 1).toUpperCase())}</div><div><header><strong>${esc(reply.author_name || 'Student')}</strong><time>${fmtDate(reply.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></header><p>${esc(reply.body)}</p></div></div>`).join('')}</div></article>`).join('');
 
       async function render() {
+        const moduleLessons = lesson.module_id ? sections.filter((row) => row.module_id === lesson.module_id) : [];
+        const moduleDone = moduleLessons.length > 0 && moduleLessons.every((row) => done.has(row.id));
+        let moduleQuiz = null;
+        let moduleQuizPassed = false;
+        if (moduleDone) {
+          const { data: exams, error: examsError } = await supabase.from('exams').select('id,title,is_final,module_id,published,duration_min').eq('course_id', lesson.course_id).eq('module_id', lesson.module_id).eq('is_final', false).eq('published', true);
+          if (examsError) toast('Could not check this module quiz. Please retry.', 'err');
+          moduleQuiz = (exams || [])[0] || null;
+          if (moduleQuiz) {
+            const { data: results, error: resultsError } = await supabase.from('exam_results').select('passed').eq('user_id', me.id).eq('exam_id', moduleQuiz.id);
+            if (resultsError) toast('Could not check your quiz results. Please retry.', 'err');
+            moduleQuizPassed = (results || []).some((result) => result.passed);
+          }
+        }
         const [{ data: comments, error: commentError }, { data: signed }] = await Promise.all([
           supabase.from('course_discussions').select('*').eq('lesson_id', lesson.id).order('created_at'),
           lesson.video_path ? supabase.storage.from('course-materials').createSignedUrl(lesson.video_path, 3600) : Promise.resolve({ data: null }),
@@ -55,7 +69,8 @@ if (!configured) {
         root.innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a href="dashboard.html#courses">My courses</a><span>/</span><a href="course.html?id=${encodeURIComponent(lesson.course?.slug || '')}">${esc(lesson.course?.title || 'Course')}</a><span>/</span><span>${esc(lesson.title)}</span></nav>
         <div class="grid grid-2" style="align-items:start;margin-top:24px"><article><span class="chip">Module ${lesson.module?.position || ''}: ${esc(lesson.module?.title || '')}</span><h1 style="margin:14px 0 20px">${esc(lesson.title)}</h1><div style="margin-bottom:24px">${video}</div><section class="block"><h2>Lesson notes</h2><div class="prose" style="max-width:none">${(lesson.content || 'Your tutor has not added notes for this section yet.').split(/\n{2,}/).map((part) => `<p>${esc(part)}</p>`).join('')}</div></section>
         <section class="block discussion-panel"><div class="discussion-heading"><div><span class="eyebrow">LEARN TOGETHER</span><h2>Section discussion</h2><p class="muted">Ask a question or share a useful insight with your cohort.</p></div><span class="discussion-live"><i></i> Live</span></div><div id="discussionThreads" class="discussion-threads">${renderThreads(rows) || '<p class="discussion-empty">No posts yet. Start the conversation with a question or insight.</p>'}</div><form id="discussionForm" class="discussion-composer"><input id="discussionParent" type="hidden"><div id="replyingTo" class="discussion-replying" hidden></div><div class="field"><label for="discussionBody">Your message</label><textarea class="input" id="discussionBody" maxlength="4000" placeholder="Write a message to your course community…" required></textarea></div><div class="discussion-composer-footer"><span class="muted">Keep it respectful and relevant to this section.</span><button class="btn btn-dark" type="submit">Post message ${icon('arrow-right', '', 15)}</button></div></form></section>
-        <div class="tools" style="margin-top:24px"><a class="btn btn-outline" ${previous ? `href="learn.html?lesson=${previous.id}"` : 'href="dashboard.html#lessons"'}>Previous section</a><span class="grow"></span><button class="btn ${done.has(lesson.id) ? 'btn-outline' : 'btn-lime'}" id="markComplete">${done.has(lesson.id) ? 'Completed' : 'Mark as completed'}</button><a class="btn btn-dark" ${next && done.has(lesson.id) ? `href="learn.html?lesson=${next.id}"` : 'aria-disabled="true" tabindex="-1" style="opacity:.55"'}>Next section ${icon('arrow-right', '', 16)}</a></div></article>
+        ${moduleDone ? `<div class="alert ${moduleQuiz ? (moduleQuizPassed ? 'ok' : 'info') : 'info'}" style="margin-top:20px">${moduleQuiz ? (moduleQuizPassed ? 'You have passed this module quiz.' : 'All module lessons are complete. Your quiz is ready.') : 'All module lessons are complete. The quiz will appear here after your tutor publishes it.'}</div>` : ''}
+        <div class="tools" style="margin-top:24px"><a class="btn btn-outline" ${previous ? `href="learn.html?lesson=${previous.id}"` : 'href="dashboard.html#lessons"'}>Previous section</a><span class="grow"></span>${moduleDone && moduleQuiz ? `<button class="btn ${moduleQuizPassed ? 'btn-outline' : 'btn-lime'}" id="openModuleQuiz">${moduleQuizPassed ? 'Retake module quiz' : 'Take module quiz'}</button>` : ''}<button class="btn ${done.has(lesson.id) ? 'btn-outline' : 'btn-lime'}" id="markComplete">${done.has(lesson.id) ? 'Completed' : 'Mark as completed'}</button><a class="btn btn-dark" ${next && done.has(lesson.id) ? `href="learn.html?lesson=${next.id}"` : 'aria-disabled="true" tabindex="-1" style="opacity:.55"'}>Next section ${icon('arrow-right', '', 16)}</a></div></article>
         <aside class="panel"><h2 style="margin-bottom:16px">Course content</h2>${nav}<a class="btn btn-outline btn-block" style="margin-top:16px" href="dashboard.html#courses">Back to My courses</a></aside></div>`;
         root.querySelector('#discussionForm').addEventListener('submit', async (event) => {
           event.preventDefault(); const body = root.querySelector('#discussionBody').value.trim(); if (!body) return;
@@ -73,19 +88,13 @@ if (!configured) {
           root.querySelector('#cancelReply').addEventListener('click', () => { root.querySelector('#discussionParent').value = ''; replyTo.hidden = true; });
           root.querySelector('#discussionBody').focus();
         }));
+        root.querySelector('#openModuleQuiz')?.addEventListener('click', () => startQuiz(moduleQuiz, next));
         root.querySelector('#markComplete').addEventListener('click', async (event) => {
           if (done.has(lesson.id)) return;
           setBusy(event.currentTarget, true, 'Saving');
           const { error: progressError } = await supabase.from('course_progress').insert({ user_id: me.id, course_id: lesson.course_id, lesson_id: lesson.id });
           if (progressError) { setBusy(event.currentTarget, false); return toast(progressError.message, 'err'); }
           done.add(lesson.id); toast('Section completed', 'ok');
-          const moduleLessons = sections.filter((row) => row.module_id === lesson.module_id);
-          const moduleDone = moduleLessons.length > 0 && moduleLessons.every((row) => done.has(row.id));
-          if (moduleDone) {
-            const { data: quiz } = await supabase.from('exams').select('id,title,is_final,module_id').eq('course_id', lesson.course_id).eq('module_id', lesson.module_id).eq('published', true).eq('is_final', false).maybeSingle();
-            if (quiz) return startQuiz(quiz, next);
-          }
-          if (next) return location.assign(`learn.html?lesson=${next.id}`);
           await render();
         });
       }
