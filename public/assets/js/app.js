@@ -92,7 +92,6 @@ async function boot() {
   initHeader(); authState(); initFooter(); bindNewsletter(); initFx(); pageTransitions();
   document.querySelectorAll('[data-year]').forEach((e) => (e.textContent = new Date().getFullYear()));
   requestAnimationFrame(() => document.body.classList.add('is-ready'));
-  showCampaigns();
   if (!configured) console.info('[courssins] Supabase is not configured yet: showing sample content. Add your keys in assets/js/config.js.');
 }
 boot();

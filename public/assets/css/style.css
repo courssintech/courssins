@@ -447,6 +447,10 @@ table.data { width: 100%; border-collapse: collapse; font-size: .925rem; min-wid
 .verify-result { border: 2px solid var(--ink); border-radius: var(--r-lg); padding: 28px; box-shadow: 10px 10px 0 var(--lime); margin-top: 28px; }
 .sample-certificate { position: relative; overflow: hidden; box-shadow: var(--shadow); }
 .sample-certificate .cert-in { min-height: 100%; gap: 14px; }
+.sample-brand { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
+.sample-brand img { flex: none; }
+.sample-brand h3 { margin: 0; }
+.sample-brand small { display: block; }
 .sample-certificate header, .sample-certificate section { position: relative; z-index: 1; }
 .sample-signature { position: relative; z-index: 1; align-items: flex-end; }
 .sample-sign-block { border: 0 !important; padding-top: 0 !important; display: flex; flex-direction: column; align-items: center; }
