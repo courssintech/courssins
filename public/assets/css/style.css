@@ -16,7 +16,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h) + 16px); }
 body { margin: 0; font-family: var(--font); font-size: 1.0625rem; line-height: 1.65; color: var(--text); background: var(--white); overflow-x: hidden; -webkit-font-smoothing: antialiased; }
-.js body { opacity: 0; transition: opacity .45s var(--ease); }
+.js body { opacity: 1; }
 .js body.is-ready { opacity: 1; }
 .js body.is-leaving { opacity: 0; transition-duration: .18s; }
 body.no-scroll { overflow: hidden; }
@@ -430,7 +430,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: .925rem; min-wid
 
 /* ---------- modal + toast ---------- */
 .modal { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 16px; opacity: 0; transition: opacity .22s; } .modal.in { opacity: 1; }
-.modal-backdrop { position: absolute; inset: 0; background: rgba(12, 13, 11, .6); backdrop-filter: blur(4px); }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(12, 13, 11, .6); }
 .modal-card { position: relative; background: #fff; width: min(560px, 100%); max-height: calc(100dvh - 32px); overflow: auto; border-radius: var(--r-lg); transform: translateY(16px) scale(.98); transition: transform .3s var(--ease); display: flex; flex-direction: column; } .modal.in .modal-card { transform: none; } .modal-card.wide { width: min(860px, 100%); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 22px 26px 12px; position: sticky; top: 0; background: #fff; z-index: 1; } .modal-head h2 { font-size: 1.35rem; } .modal-body { padding: 8px 26px 22px; } .modal-foot { padding: 16px 26px 24px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); }
 .toasts { position: fixed; z-index: 400; right: 16px; bottom: 16px; display: grid; gap: 10px; max-width: min(380px, calc(100vw - 32px)); }
